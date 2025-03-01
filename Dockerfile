@@ -1,5 +1,11 @@
 # Install uv
 FROM python:3.12-slim
+
+# Install tini
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends tini && \
+    rm -rf /var/lib/apt/lists/*
+
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 # Change the working directory to the `app` directory
@@ -18,4 +24,11 @@ COPY . /app
 # Sync the project
 RUN uv sync --frozen
 
-CMD [ "python", "floword/foo.py" ]
+ENV FLOWORD_LOG_LEVEL=INFO
+ENV FLOWORD_AUTO_MIGRATE=true
+
+# Run the server
+ENTRYPOINT ["tini", "--", "uv", "run", "floword"]
+CMD ["start"]
+
+EXPOSE 9772

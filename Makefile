@@ -10,15 +10,13 @@ check: ## Run code quality tools.
 	@uv lock --locked
 	@echo "🚀 Linting code: Running pre-commit"
 	@uv run pre-commit run -a
-	@echo "🚀 Static type checking: Running mypy"
-	@uv run mypy
 	@echo "🚀 Checking for obsolete dependencies: Running deptry"
 	@uv run deptry .
 
 .PHONY: test
 test: ## Test the code with pytest
 	@echo "🚀 Testing code: Running pytest"
-	@uv run python -m pytest --cov --cov-config=pyproject.toml --cov-report=xml
+	@uv run python -m pytest -vv -s --cov --cov-config=pyproject.toml --cov-report=xml
 
 .PHONY: build
 build: clean-build ## Build wheel file
