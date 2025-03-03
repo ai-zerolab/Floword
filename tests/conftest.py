@@ -43,7 +43,7 @@ def docker_client():
         client.ping()
     except:
         pytest.skip("Docker is not available")
-    
+
     return client
 
 
@@ -137,9 +137,6 @@ def app(monkeypatch, db_env):
 def client_header():
     config = get_config()
     headers = {}
-
-    if config.token:
-        headers["Authorization"] = f"Bearer {config.token}"
 
     return headers
 

@@ -17,15 +17,16 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-    "aiosqlite>=0.21.0",              # ignore: DEP002
+    "aiosqlite>=0.21.0", # ignore: DEP002
     "alembic>=1.14.1",
     "click>=8.1.8",
     "fastapi[standard]>=0.115.10",
     "loguru>=0.7.3",
     "mcp[cli]>=1.3.0",
-    "psycopg[binary,pool]>=3.2.5",    # ignore: DEP002
+    "psycopg[binary,pool]>=3.2.5", # ignore: DEP002
     "pydantic>=2.10.6",
     "pydantic-settings[toml]>=2.8.0",
+    "python-jose[cryptography]>=3.4.0",
     "sqlalchemy[asyncio]>=2.0.38",
     "uvicorn[standard]>=0.34.0",
 ]
@@ -107,10 +108,17 @@ ignore = [
     "E501",
     # DoNotAssignLambda
     "E731",
+    # needless-bool
+    "SIM103",
+    # raise-vanilla-args
+    "TRY003",
+    # function-call-in-default-argument
+    "B008",
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101"]
+"tests/*" = ["S101", "E722", "F841"]
+"floword/dbutils.py" = ["S603", "S607"]
 
 [tool.ruff.format]
 preview = true
