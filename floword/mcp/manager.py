@@ -27,7 +27,7 @@ async def get_mcp_manager(config: Config = Depends(get_config)):
 async def init_mcp_manager(config: Config):
     mcp_manager = _get_mcp_manager(config.mcp_config_path)
     await mcp_manager.initialize()
-    yield
+    yield mcp_manager
     await mcp_manager.cleanup()
     logger.info("MCP manager disposed")
 
@@ -94,6 +94,9 @@ if __name__ == "__main__":
     import asyncio
 
     async def main():
-        await get_mcp_manager(Config(mcp_config_path=(Path.cwd() / "./mcp.json").as_posix()))
+        config = Config(mcp_config_path=(Path.cwd() / "./mcp.json").as_posix())
+        async with init_mcp_manager(config) as mcp_manager:
+            # Just a placeholder to show it's working
+            logger.info(f"MCP manager initialized with {len(mcp_manager.clients)} clients")
 
     asyncio.run(main())

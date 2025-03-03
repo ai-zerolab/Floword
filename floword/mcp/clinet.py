@@ -34,11 +34,10 @@ class MCPClient:
             transport = await self.exit_stack.enter_async_context(stdio_client(self.server_params))
         elif isinstance(self.server_params, SSEServerParameters):
             transport = await self.exit_stack.enter_async_context(
-                self.exit_stack.enter_async_context(sse_client(self.server_params)),
+                self.exit_stack.enter_async_context(sse_client(**self.server_params.model_dump())),
             )
         else:
             raise TypeError(f"Unsupported server parameters type: {type(self.server_params)}")
-        transport = await self.exit_stack.enter_async_context(stdio_client(self.server_params))
         self.stdio, self.write = transport
         self.session = await self.exit_stack.enter_async_context(ClientSession(self.stdio, self.write))
 
