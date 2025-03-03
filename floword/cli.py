@@ -25,7 +25,7 @@ def _migrate():
 @click.command()
 @click.option("--host", type=click.STRING, default="localhost")
 @click.option("--port", type=click.INT, default=9772)
-@click.option("--auto-migrate", type=click.BOOL, default=False, envvar="FLOWORD_AUTO_MIGRATE")
+@click.option("--auto-migrate", type=click.BOOL, default=True, envvar="FLOWORD_AUTO_MIGRATE")
 def start(host, port, auto_migrate):
     """
     Start the server.
