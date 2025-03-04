@@ -1,10 +1,14 @@
+import os
 from contextlib import AsyncExitStack
-from typing import Optional, TypeVar
+from typing import TYPE_CHECKING, TypeVar
 
 from mcp import ClientSession, StdioServerParameters, Tool
 from mcp.client.sse import sse_client
 from mcp.client.stdio import stdio_client
 from pydantic import BaseModel
+
+if TYPE_CHECKING:
+    from mcp.types import CallToolResult
 
 
 class SSEServerParameters(BaseModel):
@@ -22,7 +26,7 @@ class MCPClient:
 
     def __init__(self, server_params: ServerParams):
         # Initialize session and client objects
-        self.session: Optional[ClientSession] = None
+        self.session: ClientSession | None = None
         self.exit_stack = AsyncExitStack()
 
         self.server_params: StdioServerParameters | SSEServerParameters = server_params
@@ -31,7 +35,11 @@ class MCPClient:
         """Connect to an MCP server"""
 
         if isinstance(self.server_params, StdioServerParameters):
-            transport = await self.exit_stack.enter_async_context(stdio_client(self.server_params))
+            server_params = self.server_params.model_copy(
+                update={"env": {**os.environ, **(self.server_params.env or {})}}
+            )
+
+            transport = await self.exit_stack.enter_async_context(stdio_client(server_params))
         elif isinstance(self.server_params, SSEServerParameters):
             transport = await self.exit_stack.enter_async_context(
                 self.exit_stack.enter_async_context(sse_client(**self.server_params.model_dump())),
@@ -47,77 +55,8 @@ class MCPClient:
         response = await self.session.list_tools()
         return response.tools
 
-    async def process_query(self, query: str) -> str:
-        """Process a query using Claude and available tools"""
-        messages = [{"role": "user", "content": query}]
-
-        response = await self.session.list_tools()
-        available_tools = [
-            {
-                "name": tool.name,
-                "description": tool.description,
-                "input_schema": tool.inputSchema,
-            }
-            for tool in response.tools
-        ]
-
-        # Initial Claude API call
-        response = self.anthropic.messages.create(
-            model="claude-3-5-sonnet-20241022",
-            max_tokens=1000,
-            messages=messages,
-            tools=available_tools,
-        )
-
-        # Process response and handle tool calls
-        tool_results = []
-        final_text = []
-
-        for content in response.content:
-            if content.type == "text":
-                final_text.append(content.text)
-            elif content.type == "tool_use":
-                tool_name = content.name
-                tool_args = content.input
-
-                # Execute tool call
-                result = await self.session.call_tool(tool_name, tool_args)
-                tool_results.append({"call": tool_name, "result": result})
-                final_text.append(f"[Calling tool {tool_name} with args {tool_args}]")
-
-                # Continue conversation with tool results
-                if hasattr(content, "text") and content.text:
-                    messages.append({"role": "assistant", "content": content.text})
-                messages.append({"role": "user", "content": result.content})
-
-                # Get next response from Claude
-                response = self.anthropic.messages.create(
-                    model="claude-3-5-sonnet-20241022",
-                    max_tokens=1000,
-                    messages=messages,
-                )
-
-                final_text.append(response.content[0].text)
-
-        return "\n".join(final_text)
-
-    async def chat_loop(self):
-        """Run an interactive chat loop"""
-        print("\nMCP Client Started!")
-        print("Type your queries or 'quit' to exit.")
-
-        while True:
-            try:
-                query = input("\nQuery: ").strip()
-
-                if query.lower() == "quit":
-                    break
-
-                response = await self.process_query(query)
-                print("\n" + response)
-
-            except Exception as e:
-                print(f"\nError: {e!s}")
+    async def call_tool(self, tool_name: str, args: dict | None = None) -> "CallToolResult":
+        return await self.session.call_tool(tool_name, args)
 
     async def cleanup(self):
         """Clean up resources"""

@@ -5,13 +5,24 @@ from contextlib import asynccontextmanager
 from functools import cache
 from os import PathLike
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from fastapi import Depends
+from mcp import Tool
 from pydantic import BaseModel, Field
 
 from floword.config import Config, get_config
 from floword.log import logger
 from floword.mcp.clinet import MCPClient, ServerParams
+
+if TYPE_CHECKING:
+    from mcp.types import CallToolResult
+
+
+def escape(server_name: str) -> str:
+    # Convert server name to follow this pattern: [a-zA-Z0-9_]+
+    # Convert all invalid char to ascii code with prefix `_`
+    return "".join([f"_{ord(c):x}" if not c.isalnum() else c for c in server_name])
 
 
 async def get_mcp_manager(config: Config = Depends(get_config)):
@@ -49,6 +60,7 @@ class MCPManager:
     disabled_clients: list[ServerName]
     failed_clients: dict[ServerName, tuple[ServerParams, Exception]]
     initialized: bool
+    tools: dict[ServerName, list[Tool]]
 
     def __init__(self, config_path: PathLike) -> None:
         logger.info(f"Loading MCP config from {config_path}")
@@ -63,7 +75,8 @@ class MCPManager:
 
         self.mcp_config = MCPConfig.model_validate(mcp_configs)
         self.clients = {
-            server_name: MCPClient(server_params) for server_name, server_params in self.mcp_config.mcp_servers.items()
+            escape(server_name): MCPClient(server_params)
+            for server_name, server_params in self.mcp_config.mcp_servers.items()
         }
         self.failed_clients = {}
         self.initialized = False
@@ -79,24 +92,22 @@ class MCPManager:
         if self.failed_clients:
             logger.error(f"{len(self.failed_clients)} MCP clients failed to connect")
             self.clients = {
-                server_name: client
+                escape(server_name): client
                 for server_name, client in self.clients.items()
                 if server_name not in self.failed_clients
             }
+        self.tools = await self._list_tools()
         self.initialized = True
 
     async def cleanup(self) -> None:
         for client in self.clients.values():
             await client.cleanup()
 
+    async def _list_tools(self) -> dict[ServerName, list[Tool]]:
+        return {server_name: await client.get_tools() for server_name, client in self.clients.items()}
 
-if __name__ == "__main__":
-    import asyncio
+    async def call_tool(self, server_name: ServerName, tool_name: str, args: str | dict) -> CallToolResult:
+        if isinstance(args, str):
+            args = json.loads(args)
 
-    async def main():
-        config = Config(mcp_config_path=(Path.cwd() / "./mcp.json").as_posix())
-        async with init_mcp_manager(config) as mcp_manager:
-            # Just a placeholder to show it's working
-            logger.info(f"MCP manager initialized with {len(mcp_manager.clients)} clients")
-
-    asyncio.run(main())
+        return await self.clients[server_name].call_tool(tool_name, args)

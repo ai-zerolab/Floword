@@ -1,11 +1,14 @@
 {
   "mcpServers": {
-    "demo_server": {
+    "zerolab-toolbox": {
       "args": [
-        "run",
-        "./dev/mcp_server.py"
+        "mcp-toolbox@latest",
+        "stdio"
       ],
-      "command": "uv"
+      "command": "uvx",
+      "env": {
+        "FIGMA_API_KEY": "your-figma-api-key"
+      }
     }
   }
 }
