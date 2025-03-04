@@ -69,6 +69,8 @@ jobs:
     runs-on: ubuntu-latest
     needs: [set-version]
     steps:
+      - name: Check out
+        uses: actions/checkout@v4
       - name: Export tag
         id: vars
         run: echo tag=${GITHUB_REF#refs/*/} >> $GITHUB_OUTPUT
@@ -94,8 +96,8 @@ jobs:
             file: ./Dockerfile
             push: true
             tags: |
-              ghcr.io/ai-zerolab/mcp-email-server:${{ steps.vars.outputs.tag }}
-              ghcr.io/ai-zerolab/mcp-email-server:latest
+              ghcr.io/ai-zerolab/floword:${{ steps.vars.outputs.tag }}
+              ghcr.io/ai-zerolab/floword:latest
 
   deploy-docs:
     needs: publish
