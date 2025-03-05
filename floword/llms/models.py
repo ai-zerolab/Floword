@@ -230,5 +230,13 @@ def init_model(model_init_params: ModelInitParams) -> "Model":
     )
 
 
+def get_supported_providers() -> list[str]:
+    return SUPPORTED_PROVIDERS
+
+
+def get_all_known_models() -> dict[str, list[str]]:
+    return KNOWN_MODELS
+
+
 def get_known_models(provider: str) -> list[str]:
     return KNOWN_MODELS.get(provider, [])

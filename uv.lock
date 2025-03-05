@@ -671,6 +671,7 @@ dependencies = [
     { name = "pydantic-settings", extra = ["toml"] },
     { name = "python-jose", extra = ["cryptography"] },
     { name = "sqlalchemy", extra = ["asyncio"] },
+    { name = "sse-starlette" },
     { name = "uvicorn", extra = ["standard"] },
 ]
 
@@ -705,6 +706,7 @@ requires-dist = [
     { name = "pydantic-settings", extras = ["toml"], specifier = ">=2.8.0" },
     { name = "python-jose", extras = ["cryptography"], specifier = ">=3.4.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0.38" },
+    { name = "sse-starlette", specifier = ">=2.2.1" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.34.0" },
 ]
 

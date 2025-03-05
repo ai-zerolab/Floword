@@ -19,6 +19,7 @@ class Conversation(Base):
 
     id_ = Column(Integer, primary_key=True, index=True, autoincrement=True)
     user_id = Column(Text, nullable=False)
+    title = Column(Text, nullable=False, default="Untitled")
     conversation_id = Column(Text, unique=True, index=True, default=lambda: uuid.uuid4().hex, nullable=False)
     messages = Column(JSON, nullable=True)
     created_at = Column(

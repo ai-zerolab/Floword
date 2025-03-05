@@ -77,7 +77,7 @@ class MCPManager:
 
         self.mcp_config = MCPConfig.model_validate(mcp_configs)
         self.clients = {
-            escape(server_name): MCPClient(server_params)
+            escape(server_name): MCPClient(server_name, server_params)
             for server_name, server_params in self.mcp_config.mcp_servers.items()
             if server_name not in self.disabled_clients
         }
@@ -113,6 +113,7 @@ class MCPManager:
         if isinstance(args, str):
             args = json.loads(args)
 
+        logger.info(f"Calling tool {tool_name} on {server_name}")
         return await self.clients[server_name].call_tool(tool_name, args)
 
     def get_tools(self) -> dict[ServerName, list[Tool]]:
