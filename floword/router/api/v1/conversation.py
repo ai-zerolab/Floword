@@ -7,6 +7,7 @@ from floword.router.api.params import (
     NewConversation,
     PermitCallToolRequest,
     QueryConversations,
+    RetryRequest,
 )
 from floword.router.controller.conversation import (
     ConversationController,
@@ -97,6 +98,19 @@ async def run(
 ) -> EventSourceResponse:
     return EventSourceResponse(
         conversation_controller.permit_call_tool(user, conversation_id, params),
+        ping=True,
+    )
+
+
+@router.post("/retry/{conversation_id}")
+async def retry_conversation(
+    conversation_id: str,
+    params: RetryRequest,
+    user: User = Depends(get_current_user),
+    conversation_controller: ConversationController = Depends(get_conversation_controller),
+) -> EventSourceResponse:
+    return EventSourceResponse(
+        conversation_controller.retry_conversation(user, conversation_id, params),
         ping=True,
     )
 

@@ -9,18 +9,20 @@ from typing import Any, get_args
 from fastapi import Depends, HTTPException, status
 from pydantic_ai.messages import (
     ModelMessage,
+    ModelRequest,
     ModelRequestPart,
     ModelResponsePart,
     ModelResponseStreamEvent,
 )
 from pydantic_ai.models import Model
 from pydantic_ai.usage import Usage
+from pydantic_ai_bedrock.bedrock import ReasoningPart
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from floword.config import Config, get_config
 from floword.dbutils import get_db_session
-from floword.llms.mcp_agent import MCPAgent
+from floword.llms.mcp_agent import ConversationError, MCPAgent
 from floword.llms.models import ModelInitParams, get_default_model, init_model
 from floword.mcp.manager import MCPManager, get_mcp_manager
 from floword.orm import Conversation
@@ -31,6 +33,7 @@ from floword.router.api.params import (
     PermitCallToolRequest,
     QueryConversations,
     RedactableCompletion,
+    RetryRequest,
 )
 from floword.users import User
 
@@ -83,7 +86,11 @@ def _to_parts(parts: list[dict | None]) -> list[ModelResponsePart | ModelRequest
     if parts is None:
         return None
 
-    concrete_types = get_args(get_args(ModelRequestPart)[0]) + get_args(get_args(ModelResponsePart)[0])
+    concrete_types = [
+        *get_args(get_args(ModelRequestPart)[0]),
+        *get_args(get_args(ModelResponsePart)[0]),
+        ReasoningPart,
+    ]
     return [_to_one_part(part, concrete_types) for part in parts]
 
 
@@ -102,7 +109,7 @@ def to_model_messages(messages: list[dict | None]) -> list[ModelMessage]:
     if messages is None:
         return None
 
-    concrete_types = get_args(get_args(ModelMessage)[0])
+    concrete_types = list(get_args(get_args(ModelMessage)[0]))
     return [_to_one_model_message(message, concrete_types) for message in messages]
 
 
@@ -236,7 +243,7 @@ class ConversationController:
 
     async def chat(
         self, user: User, conversation_id: str, params: ChatRequest
-    ) -> AsyncIterator[ModelResponseStreamEvent]:
+    ) -> AsyncIterator[ModelResponseStreamEvent | ModelRequest]:
         result = await self.session.execute(select(Conversation).where(Conversation.conversation_id == conversation_id))
         conversation = result.scalars().one_or_none()
         if not conversation:
@@ -252,15 +259,17 @@ class ConversationController:
             last_conversation=params.redacted_messages or to_model_messages(conversation.messages),
             usage=Usage(**(conversation.usage or {})),
         )
-
-        async for part in agent.chat_stream(params.prompt, model_settings=params.llm_model_settings):
-            yield part
+        try:
+            async for part in agent.chat_stream(params.prompt, model_settings=params.llm_model_settings):
+                yield {"data": dataclass_to_dict(part)}
+        except ConversationError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
         await self._update_conversation(conversation_id, agent.all_messages(), agent.usage())
 
-    async def permit_call_tool(
-        self, user: User, conversation_id: str, params: PermitCallToolRequest
-    ) -> AsyncIterator[ModelResponseStreamEvent]:
+    async def retry_conversation(
+        self, user: User, conversation_id: str, params: RetryRequest
+    ) -> AsyncIterator[ModelResponseStreamEvent | ModelRequest]:
         result = await self.session.execute(select(Conversation).where(Conversation.conversation_id == conversation_id))
         conversation = result.scalars().one_or_none()
         if not conversation:
@@ -276,13 +285,44 @@ class ConversationController:
             last_conversation=params.redacted_messages or to_model_messages(conversation.messages),
             usage=Usage(**(conversation.usage or {})),
         )
-        async for part in agent.run_tool_stream(
-            model_settings=params.llm_model_settings,
-            execute_all_tool_calls=params.execute_all_tool_calls,
-            execute_tool_call_ids=params.execute_tool_call_ids,
-            execute_tool_call_part=params.execute_tool_call_part,
-        ):
-            yield part
+
+        try:
+            async for part in agent.retry_stream(model_settings=params.llm_model_settings):
+                yield {"data": dataclass_to_dict(part)}
+        except ConversationError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
+
+        await self._update_conversation(conversation_id, agent.all_messages(), agent.usage())
+
+    async def permit_call_tool(
+        self, user: User, conversation_id: str, params: PermitCallToolRequest
+    ) -> AsyncIterator[ModelResponseStreamEvent | ModelRequest]:
+        result = await self.session.execute(select(Conversation).where(Conversation.conversation_id == conversation_id))
+        conversation = result.scalars().one_or_none()
+        if not conversation:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Conversation not found")
+
+        if conversation.user_id != user.user_id:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+
+        agent = MCPAgent(
+            model=self.get_model(params),
+            mcp_manager=self.mcp_manager,
+            system_prompt=self.default_system_prompt,
+            last_conversation=params.redacted_messages or to_model_messages(conversation.messages),
+            usage=Usage(**(conversation.usage or {})),
+        )
+
+        try:
+            async for part in agent.run_tool_stream(
+                model_settings=params.llm_model_settings,
+                execute_all_tool_calls=params.execute_all_tool_calls,
+                execute_tool_call_ids=params.execute_tool_call_ids,
+                execute_tool_call_part=params.execute_tool_call_part,
+            ):
+                yield {"data": dataclass_to_dict(part)}
+        except ConversationError as e:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
         await self._update_conversation(conversation_id, agent.all_messages(), agent.usage())
 
     async def delete_conversation(self, user: User, conversation_id: str) -> None:

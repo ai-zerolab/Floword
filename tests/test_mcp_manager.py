@@ -82,7 +82,7 @@ async def test_mcp_manager_get_tools(temp_mcp_config):
 
 async def test_init_mcp_manager_context_manager(temp_mcp_config):
     """Test the init_mcp_manager context manager."""
-    config = Config(temp_mcp_config)
+    config = Config(mcp_config_path=temp_mcp_config.as_posix())
 
     # Mock the initialize and cleanup methods
     original_initialize = MCPManager.initialize

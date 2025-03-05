@@ -26,11 +26,15 @@ if TYPE_CHECKING:
     from pydantic_ai.models import Model
 
 
-class AlreadyResponsedError(TypeError):
+class ConversationError(TypeError):
     pass
 
 
-class NeedUserPromptError(TypeError):
+class AlreadyResponsedError(ConversationError):
+    pass
+
+
+class NeedUserPromptError(ConversationError):
     pass
 
 
@@ -121,30 +125,34 @@ class MCPAgent:
             *(self._execute_one_tool_call_part(tool_call_part) for tool_call_part in selected_tool_call_parts)
         )
 
-    async def resume_stream(
+    async def retry_stream(
         self, model_settings: ModelSettings | None = None
-    ) -> AsyncIterator[ModelResponseStreamEvent]:
-        if not self._last_conversation or isinstance(self._last_conversation[-1], ModelResponse):
+    ) -> AsyncIterator[ModelResponseStreamEvent | ModelRequest]:
+        if self._last_conversation and isinstance(self._last_conversation[-1], ModelResponse):
             raise AlreadyResponsedError("Already responded.")
 
-        return await self._request_stream(
-            self._last_conversation,
+        messages = self._last_conversation or self._get_init_messages()
+        yield messages[-1]
+        async for m in self._request_stream(
+            messages,
             model_settings,
-        )
+        ):
+            yield m
 
     async def chat_stream(
         self,
         prompt: str,
         model_settings: ModelSettings | None = None,
-    ) -> AsyncIterator[ModelResponseStreamEvent]:
-        previous_conversation = self._last_conversation or self._get_init_messages()
-        if isinstance(previous_conversation[-1], ModelResponse):
+    ) -> AsyncIterator[ModelResponseStreamEvent | ModelRequest]:
+        if self._last_conversation and not isinstance(self._last_conversation[-1], ModelResponse):
             raise NeedUserPromptError("Please resume the conversation.")
 
+        previous_conversation = self._last_conversation or self._get_init_messages()
         messages = [
             *previous_conversation,
             ModelRequest(parts=[UserPromptPart(content=prompt)]),
         ]
+        yield messages[-1]
 
         async for m in self._request_stream(
             messages,
@@ -159,25 +167,8 @@ class MCPAgent:
         execute_all_tool_calls: bool = False,
         execute_tool_call_ids: list[str] | None = None,
         execute_tool_call_part: list[ToolCallPart] | None = None,
-    ) -> AsyncIterator[ModelResponseStreamEvent]:
-        async for m in self._request_stream(
-            self._last_conversation or self._get_init_messages(),
-            model_settings,
-            execute_all_tool_calls=execute_all_tool_calls,
-            execute_tool_call_ids=execute_tool_call_ids,
-            execute_tool_call_part=execute_tool_call_part,
-        ):
-            yield m
-
-    async def _request_stream(
-        self,
-        messages: list[ModelMessage],
-        model_settings: ModelSettings | None,
-        *,
-        execute_all_tool_calls: bool = False,
-        execute_tool_call_ids: list[str] | None = None,
-        execute_tool_call_part: list[ToolCallPart] | None = None,
-    ) -> AsyncIterator[ModelResponseStreamEvent]:
+    ) -> AsyncIterator[ModelResponseStreamEvent | ModelRequest]:
+        messages = self._last_conversation or self._get_init_messages()
         if execute_all_tool_calls:
             tool_return_parts = await self._execute_all_tool_calls(messages[-1])
         else:
@@ -186,12 +177,27 @@ class MCPAgent:
             )
         if tool_return_parts:
             messages = [*messages, ModelRequest(parts=tool_return_parts)]
+            yield messages[-1]
+
+        async for m in self._request_stream(
+            messages,
+            model_settings,
+        ):
+            yield m
+
+    async def _request_stream(
+        self,
+        messages: list[ModelMessage],
+        model_settings: ModelSettings | None,
+    ) -> AsyncIterator[ModelResponseStreamEvent]:
+        if not isinstance(messages[-1], ModelRequest):
+            raise NeedUserPromptError("Please resume the conversation.")
+
         model_request_parameters = ModelRequestParameters(
             function_tools=self._map_tools(),
             allow_text_result=True,
             result_tools=[],
         )
-
         async with self.model.request_stream(messages, model_settings, model_request_parameters) as response:
             async for message in response:
                 if not message:

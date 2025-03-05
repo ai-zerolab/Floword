@@ -51,6 +51,10 @@ class ChatRequest(RedactableCompletion):
     prompt: str
 
 
+class RetryRequest(RedactableCompletion):
+    pass
+
+
 class PermitCallToolRequest(RedactableCompletion):
     execute_all_tool_calls: bool = False
     execute_tool_call_ids: list[str] | None = None
