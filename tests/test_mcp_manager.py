@@ -127,8 +127,8 @@ class TestMCPManagerWithMocks:
         manager.initialized = True
 
         # Create mock clients
-        client1 = MCPClient(StdioServerParameters(command="echo", args=["mock"]))
-        client2 = MCPClient(StdioServerParameters(command="echo", args=["mock"]))
+        client1 = MCPClient("server1", StdioServerParameters(command="echo", args=["mock"]))
+        client2 = MCPClient("server2", StdioServerParameters(command="echo", args=["mock"]))
 
         manager.clients = {"server1": client1, "server2": client2}
 

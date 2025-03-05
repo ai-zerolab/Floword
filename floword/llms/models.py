@@ -1,12 +1,11 @@
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any, Literal
 
+from fastapi import Depends
 from pydantic import BaseModel
+from pydantic_ai.models import Model
 
+from floword.config import Config, get_config
 from floword.log import logger
-
-if TYPE_CHECKING:
-    from pydantic_ai.models import Model
-
 
 SUPPORTED_PROVIDERS = Literal[
     "openai",
@@ -221,7 +220,20 @@ class ModelInitParams(BaseModel):
     model_kwargs: dict[str, Any] = {}
 
 
-def init_model(model_init_params: ModelInitParams) -> "Model":
+def get_default_model(config: Config = Depends(get_config)) -> Model | None:
+    if not config.default_model_name:
+        return None
+
+    return init_model(
+        ModelInitParams(
+            provider=config.default_model_provider,
+            model_name=config.default_model_name,
+            model_kwargs=config.default_model_kwargs,
+        )
+    )
+
+
+def init_model(model_init_params: ModelInitParams) -> Model:
     model_cls = _get_model_cls(model_init_params.provider)
     logger.debug(f"Initializing model {model_cls}")
     return model_cls(

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response, status
 from sse_starlette.sse import EventSourceResponse
 
 from floword.router.api.params import (
@@ -18,6 +18,26 @@ router = APIRouter(
     tags=["conversation"],
     prefix="/api/v1/conversation",
 )
+
+
+@router.post("/generate-title/{conversation_id}")
+async def generate_title(
+    conversation_id: str,
+    user: User = Depends(get_current_user),
+    conversation_controller: ConversationController = Depends(get_conversation_controller),
+) -> ConversionInfo:
+    # TODO: Update conversation and auto gen title from messages
+    raise NotImplementedError
+
+
+@router.post("/update/{conversation_id}")
+async def update_conversation(
+    conversation_id: str,
+    user: User = Depends(get_current_user),
+    conversation_controller: ConversationController = Depends(get_conversation_controller),
+) -> ConversionInfo:
+    # TODO: Update conversation and auto gen title from messages
+    raise NotImplementedError
 
 
 @router.post("/create")
@@ -55,19 +75,38 @@ async def get_conversation_info(
     return await conversation_controller.get_conversation_info(user, conversation_id)
 
 
-@router.post("/chat")
+@router.post("/chat/{conversation_id}")
 async def chat(
+    conversation_id: str,
     params: ChatRequest,
     user: User = Depends(get_current_user),
     conversation_controller: ConversationController = Depends(get_conversation_controller),
 ) -> EventSourceResponse:
-    pass
+    return EventSourceResponse(
+        conversation_controller.chat(user, conversation_id, params),
+        ping=True,
+    )
 
 
 @router.post("/permit-call-tool")
 async def run(
+    conversation_id: str,
     params: PermitCallToolRequest,
     user: User = Depends(get_current_user),
     conversation_controller: ConversationController = Depends(get_conversation_controller),
 ) -> EventSourceResponse:
-    pass
+    return EventSourceResponse(
+        conversation_controller.permit_call_tool(user, conversation_id, params),
+        ping=True,
+    )
+
+
+@router.post("/delete/{conversation_id}")
+async def delete_conversation(
+    conversation_id: str,
+    user: User = Depends(get_current_user),
+    conversation_controller: ConversationController = Depends(get_conversation_controller),
+) -> Response:
+    await conversation_controller.delete_conversation(user, conversation_id)
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

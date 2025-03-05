@@ -22,6 +22,7 @@ class Conversation(Base):
     title = Column(Text, nullable=False, default="Untitled")
     conversation_id = Column(Text, unique=True, index=True, default=lambda: uuid.uuid4().hex, nullable=False)
     messages = Column(JSON, nullable=True)
+    usage = Column(JSON, nullable=True)
     created_at = Column(
         DateTime(timezone=True),
         server_default=func.now(),

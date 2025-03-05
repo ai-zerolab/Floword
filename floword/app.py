@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from floword.config import get_config
 from floword.dbutils import init_engine
 from floword.mcp.manager import init_mcp_manager
+from floword.router.api import routers
 
 
 @asynccontextmanager
@@ -20,3 +21,7 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/")
 async def hello():
     return {"message": "Hello World"}
+
+
+for router in routers:
+    app.include_router(router)

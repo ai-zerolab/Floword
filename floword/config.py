@@ -10,6 +10,10 @@ def get_config() -> Config:
 
 
 class Config(BaseSettings):
+    """
+    Complex types like list, set, dict, and sub-models are populated from the environment by treating the environment variable's value as a JSON-encoded string.
+    """
+
     jwt_secret_token: str | None = None
     allow_anonymous: bool = True
 
@@ -21,9 +25,16 @@ class Config(BaseSettings):
     pg_port: int | None = 5432
     pg_database: str | None = "floword"
 
+    default_model_provider: str | None = "openai"
+    default_model_name: str | None = None
+    default_model_kwargs: dict | None = None
+
+    default_conversation_system_prompt: str | None = None
+    default_workflow_system_prompt: str | None = None
+
     mcp_config_path: str = (Path.cwd() / "./mcp.json").expanduser().resolve().absolute().as_posix()
 
-    model_config = SettingsConfigDict(env_prefix="floword_", case_sensitive=False, frozen=True)
+    model_config = SettingsConfigDict(env_prefix="floword_", case_sensitive=False, frozen=True, env_file=".env")
 
     def get_db_url(self, async_mode: bool = True) -> str:
         if self.use_postgres:

@@ -12,7 +12,7 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models.test import TestModel
 
-from floword.llms.mcp_agent import McpAgent
+from floword.llms.mcp_agent import MCPAgent
 from floword.mcp.manager import MCPManager
 
 
@@ -24,7 +24,7 @@ async def agent_builder(temp_mcp_config: Path):
     await mcp_manager.initialize()
 
     caller = partial(
-        McpAgent,
+        MCPAgent,
         model=None,
         mcp_manager=mcp_manager,
         system_prompt="You are a helpful assistent",
@@ -34,7 +34,7 @@ async def agent_builder(temp_mcp_config: Path):
 
 
 async def test_mcp_agent_plain_response(agent_builder):
-    agent: McpAgent = agent_builder(model=TestModel())
+    agent: MCPAgent = agent_builder(model=TestModel())
 
     tool_call_parts = [message async for message in agent.chat_stream("I know you will call tools")]
     assert tool_call_parts == snapshot([

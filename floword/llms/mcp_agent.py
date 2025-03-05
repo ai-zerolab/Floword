@@ -34,7 +34,7 @@ class NeedUserPromptError(TypeError):
     pass
 
 
-class McpAgent:
+class MCPAgent:
     def __init__(
         self,
         model: "Model",
