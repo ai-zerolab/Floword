@@ -1,3 +1,4 @@
+import asyncio
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 
@@ -58,19 +59,19 @@ class McpAgent:
             for tool in tools
         ]
 
-    def dispatch_tool_definition_name(self, tool_definition_name: str) -> tuple[str, str]:
+    def _dispatch_tool_definition_name(self, tool_definition_name: str) -> tuple[str, str]:
         server_name, tool_name = tool_definition_name.split("-")
         return server_name, tool_name
 
-    def map_tools(self) -> list[ToolDefinition]:
+    def _map_tools(self) -> list[ToolDefinition]:
         return [
             tool_def
-            for server_name, tools in self.mcp_manager.tools.items()
+            for server_name, tools in self.mcp_manager.get_tools().items()
             for tool_def in self._get_tool_definitions(server_name, tools)
         ]
 
     async def _execute_one_tool_call_part(self, tool_call_part: ToolCallPart) -> ToolReturnPart:
-        server_name, tool_name = self.dispatch_tool_definition_name(tool_call_part.tool_name)
+        server_name, tool_name = self._dispatch_tool_definition_name(tool_call_part.tool_name)
         call_tool_result = await self.mcp_manager.call_tool(server_name, tool_name, tool_call_part.args)
         return ToolReturnPart(
             tool_name=tool_call_part.tool_name,
@@ -78,7 +79,7 @@ class McpAgent:
             tool_call_id=tool_call_part.tool_call_id,
         )
 
-    async def execute_all_tool_calls(self, message: ModelMessage) -> list[ToolReturnPart]:
+    async def _execute_all_tool_calls(self, message: ModelMessage) -> list[ToolReturnPart]:
         if not isinstance(message, ModelResponse):
             return []
 
@@ -90,7 +91,7 @@ class McpAgent:
             )
         )
 
-    async def execute_tool_calls(
+    async def _execute_tool_calls(
         self,
         message: ModelMessage,
         execute_tool_call_ids: list[str] | None,
@@ -122,7 +123,7 @@ class McpAgent:
 
         return await self._request_stream(
             self._last_conversation,
-            None,
+            model_settings,
         )
 
     async def chat_stream(
@@ -170,16 +171,16 @@ class McpAgent:
         execute_tool_call_part: list[ToolCallPart] | None = None,
     ) -> AsyncIterator[ModelResponseStreamEvent]:
         if execute_all_tool_calls:
-            tool_return_parts = await self.execute_all_tool_calls(messages[-1])
+            tool_return_parts = await self._execute_all_tool_calls(messages[-1])
         else:
-            tool_return_parts = await self.execute_tool_calls(
+            tool_return_parts = await self._execute_tool_calls(
                 messages[-1], execute_tool_call_ids, execute_tool_call_part
             )
         if tool_return_parts:
             messages = [*messages, ModelRequest(parts=tool_return_parts)]
 
         model_request_parameters = ModelRequestParameters(
-            function_tools=self.map_tools(),
+            function_tools=self._map_tools(),
             allow_text_result=True,
             result_tools=[],
         )

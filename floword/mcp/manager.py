@@ -65,18 +65,21 @@ class MCPManager:
     def __init__(self, config_path: PathLike) -> None:
         logger.info(f"Loading MCP config from {config_path}")
         config_path = Path(config_path)
+        if not config_path.exists() or not config_path.is_file():
+            raise ValueError(f"Invalid MCP config path: {config_path}")
 
         mcp_configs = json.loads(config_path.read_text())
-        self.disabled_clients = []
-        for server_name, server_params in mcp_configs["mcpServers"].items():
-            if not server_params.get("enabled", True):
-                del mcp_configs["mcpServers"][server_name]
-                self.disabled_clients.append(server_name)
+        self.disabled_clients = [
+            server_name
+            for server_name, server_params in mcp_configs["mcpServers"].items()
+            if not server_params.get("enabled", True)
+        ]
 
         self.mcp_config = MCPConfig.model_validate(mcp_configs)
         self.clients = {
             escape(server_name): MCPClient(server_params)
             for server_name, server_params in self.mcp_config.mcp_servers.items()
+            if server_name not in self.disabled_clients
         }
         self.failed_clients = {}
         self.initialized = False
@@ -111,3 +114,6 @@ class MCPManager:
             args = json.loads(args)
 
         return await self.clients[server_name].call_tool(tool_name, args)
+
+    def get_tools(self) -> dict[ServerName, list[Tool]]:
+        return self.tools

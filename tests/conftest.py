@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+import json
 import os
+
+from floword.mcp.manager import MCPManager, get_mcp_manager
 
 os.environ["LOGURU_LEVEL"] = "DEBUG"
 
 import socket
 import time
 from collections.abc import Generator, Iterable
+from pathlib import Path
 from uuid import uuid4
 
 import docker
@@ -111,7 +115,7 @@ def db_env(request, pg_port, tmp_path) -> Generator[Iterable[tuple[str, str]], N
 
 
 @pytest.fixture
-def app(monkeypatch, db_env):
+def app(monkeypatch, db_env, temp_mcp_config):
     for env, value in db_env:
         monkeypatch.setenv(env, value)
     runner = CliRunner()
@@ -129,7 +133,8 @@ def app(monkeypatch, db_env):
     assert result.exit_code == 0
 
     # Dependencies injection mock
-    APP.dependency_overrides = {}
+    mock_mcp_manager = MCPManager(temp_mcp_config)
+    APP.dependency_overrides = {get_mcp_manager: lambda: mock_mcp_manager}
     yield APP
 
 
@@ -139,6 +144,28 @@ def client_header():
     headers = {}
 
     return headers
+
+
+@pytest.fixture
+def temp_mcp_config(tmp_path: Path) -> Path:
+    """Create a temporary MCP config file."""
+    config_path = tmp_path / "mcp.json"
+    config = {
+        "mcpServers": {
+            "mock": {
+                "command": "uvx",
+                "args": ["tests/mock/mcp_server"],
+                "enabled": True,
+            },
+            "disabled-mock": {
+                "command": "uvx",
+                "args": ["tests/mock/mcp_server"],
+                "enabled": False,
+            },
+        }
+    }
+    config_path.write_text(json.dumps(config))
+    return config_path
 
 
 @pytest.fixture
