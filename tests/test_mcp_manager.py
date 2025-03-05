@@ -61,10 +61,10 @@ def test_mcp_manager_init_invalid_json(invalid_mcp_config: Path):
 
 
 @pytest.mark.asyncio
-async def test_mcp_manager_get_tools():
+async def test_mcp_manager_get_tools(temp_mcp_config):
     """Test the get_tools method."""
     # Create a mock MCPManager with predefined tools
-    manager = MCPManager(Path("tests/mock/mcp.json"))
+    manager = MCPManager(temp_mcp_config)
 
     # Mock the tools dictionary
     tool1 = Tool(name="tool1", description="Tool 1", inputSchema={})
@@ -82,9 +82,9 @@ async def test_mcp_manager_get_tools():
 
 
 @pytest.mark.asyncio
-async def test_init_mcp_manager_context_manager():
+async def test_init_mcp_manager_context_manager(temp_mcp_config):
     """Test the init_mcp_manager context manager."""
-    config = Config(mcp_config_path="tests/mock/mcp.json")
+    config = Config(temp_mcp_config)
 
     # Mock the initialize and cleanup methods
     original_initialize = MCPManager.initialize
@@ -123,9 +123,9 @@ class TestMCPManagerWithMocks:
     """Tests for MCPManager using mocks."""
 
     @pytest.fixture
-    def mock_manager(self):
+    def mock_manager(self, temp_mcp_config):
         """Create a mock MCPManager."""
-        manager = MCPManager(Path("tests/mock/mcp.json"))
+        manager = MCPManager(temp_mcp_config)
         manager.initialized = True
 
         # Create mock clients
@@ -167,13 +167,3 @@ class TestMCPManagerWithMocks:
         # Call the tool
         result = await mock_manager.call_tool("server1", "test_tool", {"arg1": "value1"})
         assert result == "tool result"
-
-
-@FunctionModel
-def test_mcp_manager_with_function_model():
-    """Test MCPManager with FunctionModel."""
-    # This is just a demonstration of using FunctionModel
-    manager = MCPManager(Path("tests/mock/mcp.json"))
-    assert not manager.initialized
-
-    return {"success": True, "message": "MCPManager tested with FunctionModel"}

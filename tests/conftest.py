@@ -32,6 +32,8 @@ TEST_DB_SETTINGS = {
     "FLOWORD_PG_DATABASE": "floword",
 }
 
+_HERE = Path(__file__).parent
+
 
 def get_port():
     # Get an unoccupied port
@@ -118,6 +120,9 @@ def db_env(request, pg_port, tmp_path) -> Generator[Iterable[tuple[str, str]], N
 def app(monkeypatch, db_env, temp_mcp_config):
     for env, value in db_env:
         monkeypatch.setenv(env, value)
+
+    monkeypatch.setenv("FLOWORD_MCP_CONFIG_PATH", temp_mcp_config.as_posix())
+
     runner = CliRunner()
     result = runner.invoke(
         migrate,
@@ -153,13 +158,13 @@ def temp_mcp_config(tmp_path: Path) -> Path:
     config = {
         "mcpServers": {
             "mock": {
-                "command": "uvx",
-                "args": ["tests/mock/mcp_server"],
+                "command": "python",
+                "args": [(_HERE / "mock" / "mcp_server.py").absolute().as_posix()],
                 "enabled": True,
             },
             "disabled-mock": {
-                "command": "uvx",
-                "args": ["tests/mock/mcp_server"],
+                "command": "python",
+                "args": [(_HERE / "mock" / "mcp_server.py").absolute().as_posix()],
                 "enabled": False,
             },
         }
