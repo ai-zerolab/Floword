@@ -1,5 +1,5 @@
-from collections.abc import AsyncIterator, Iterable
-from typing import Any
+from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 from mcp import Tool
 from pydantic_ai.messages import ModelMessage, ToolCallPart, ToolReturnPart
@@ -12,28 +12,43 @@ from pydantic_ai.models import (
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import Usage
 
-from floword.llms.models import init_model
+from floword.llms.models import ModelInitParams, init_model
 from floword.mcp.manager import MCPManager
 
+if TYPE_CHECKING:
+    from pydantic_ai.models import Model
 
-class Agent:
+
+class AlreadyResponsedError(TypeError):
+    pass
+
+
+class NeedUserPromptError(TypeError):
+    pass
+
+
+class McpAgent:
     def __init__(
         self,
-        provider: str,
-        model_name: str,
+        model: "Model",
         mcp_manager: MCPManager,
+        *,
+        system_prompt: str | None = None,
+        last_conversation: list[ModelMessage] | None = None,
         usage: Usage | None = None,
-        *model_args: Iterable[Any],
-        **model_kwargs: dict[str, Any],
     ):
-        self.model = init_model(provider, model_name, *model_args, **model_kwargs)
+        self.model = model
         self.mcp_manager = mcp_manager
 
-        self._last_conversation: list[ModelMessage] | None = None
+        self._system_prompt = system_prompt
+        self._last_conversation: list[ModelMessage] = last_conversation
         self._last_response: ModelResponse | None = None
         self._usage: Usage = usage or Usage()
 
-    def get_tool_definitions(self, server_name: str, tools: list[Tool]) -> list[ToolDefinition]:
+    def _get_init_messages(self) -> list[ModelMessage]:
+        return [ModelRequest(parts=[SystemPromptPart(content=self._system_prompt)])]
+
+    def _get_tool_definitions(self, server_name: str, tools: list[Tool]) -> list[ToolDefinition]:
         return [
             ToolDefinition(
                 name=f"{server_name}-{tool.name}",
@@ -51,7 +66,7 @@ class Agent:
         return [
             tool_def
             for server_name, tools in self.mcp_manager.tools.items()
-            for tool_def in self.get_tool_definitions(server_name, tools)
+            for tool_def in self._get_tool_definitions(server_name, tools)
         ]
 
     async def _execute_one_tool_call_part(self, tool_call_part: ToolCallPart) -> ToolReturnPart:
@@ -68,7 +83,11 @@ class Agent:
             return []
 
         return await asyncio.gather(
-            *(self._execute_one_tool_call_part(tool_call_part) for tool_call_part in message.tool_call_parts)
+            *(
+                self._execute_one_tool_call_part(tool_call_part)
+                for tool_call_part in message.parts
+                if isinstance(tool_call_part, ToolCallPart)
+            )
         )
 
     async def execute_tool_calls(
@@ -95,7 +114,53 @@ class Agent:
             *(self._execute_one_tool_call_part(tool_call_part) for tool_call_part in selected_tool_call_parts)
         )
 
-    async def request_stream(
+    async def resume_stream(
+        self, model_settings: ModelSettings | None = None
+    ) -> AsyncIterator[ModelResponseStreamEvent]:
+        if not self._last_conversation or not isinstance(self._last_conversation[-1], ModelRequest):
+            raise AlreadyResponsedError("Already responded.")
+
+        return await self._request_stream(
+            self._last_conversation,
+            None,
+        )
+
+    async def chat_stream(
+        self,
+        prompt: str,
+        model_settings: ModelSettings | None = None,
+    ) -> AsyncIterator[ModelResponseStreamEvent]:
+        previous_conversation = self._last_conversation or self._get_init_messages()
+        if isinstance(previous_conversation[-1], ModelRequest):
+            raise NeedUserPromptError("Please resume the conversation.")
+
+        messages = [
+            *previous_conversation,
+            ModelRequest(parts=[UserPromptPart(content=prompt)]),
+        ]
+
+        return await self._request_stream(
+            messages,
+            model_settings,
+        )
+
+    async def run_tool_stream(
+        self,
+        model_settings: ModelSettings | None = None,
+        *,
+        execute_all_tool_calls: bool = False,
+        execute_tool_call_ids: list[str] | None = None,
+        execute_tool_call_part: list[ToolCallPart] | None = None,
+    ) -> AsyncIterator[ModelResponseStreamEvent]:
+        return await self._request_stream(
+            self._last_conversation or self._get_init_messages(),
+            model_settings,
+            execute_all_tool_calls=execute_all_tool_calls,
+            execute_tool_call_ids=execute_tool_call_ids,
+            execute_tool_call_part=execute_tool_call_part,
+        )
+
+    async def _request_stream(
         self,
         messages: list[ModelMessage],
         model_settings: ModelSettings | None,
@@ -110,29 +175,29 @@ class Agent:
             tool_return_parts = await self.execute_tool_calls(
                 messages[-1], execute_tool_call_ids, execute_tool_call_part
             )
+        if tool_return_parts:
+            messages = [*messages, ModelRequest(parts=tool_return_parts)]
 
-        self._last_conversation = [*messages, ModelRequest(parts=tool_return_parts)]
         model_request_parameters = ModelRequestParameters(
             function_tools=self.map_tools(),
             allow_text_result=True,
             result_tools=[],
         )
 
-        async with self.model.request_stream(
-            self._last_conversation, model_settings, model_request_parameters
-        ) as response:
+        async with self.model.request_stream(messages, model_settings, model_request_parameters) as response:
             async for message in response:
                 if not message:
                     continue
                 yield message
             self._last_response = response.get()
+            self._last_conversation = [*messages, self._last_response]
             self._usage.incr(response.usage(), requests=1)
 
     def all_messages(self) -> list[ModelMessage]:
         if self._last_conversation is None:
             # No request has been made yet
             return []
-        return [*self._last_conversation, self._last_response]
+        return self._last_conversation
 
     def last_response(self) -> ModelResponse | None:
         return self._last_response
@@ -157,35 +222,28 @@ if __name__ == "__main__":
             # Just a placeholder to show it's working
             logger.info(f"MCP manager initialized with {len(mcp_manager.clients)} clients")
 
-            agent = Agent(
-                provider="bedrock",
-                model_name="anthropic.claude-3-5-sonnet-20241022-v2:0",
-                mcp_manager=mcp_manager,
+            model = init_model(
+                ModelInitParams(
+                    provider="bedrock",
+                    model_name="anthropic.claude-3-5-sonnet-20241022-v2:0",
+                )
             )
 
-            async for message in agent.request_stream(
-                messages=[
-                    ModelRequest(
-                        parts=[
-                            SystemPromptPart(content="You are a helpful assistent"),
-                            UserPromptPart(content="Use tool to list all files in /opt"),
-                        ]
-                    )
-                ],
-                model_settings=None,
+            agent = McpAgent(
+                model=model,
+                mcp_manager=mcp_manager,
+                system_prompt="You are a helpful assistent",
+            )
+
+            async for message in agent.chat_stream(
+                "Use tool to list all files in /opt",
             ):
                 print(message)
 
             last_response = agent.last_response()
-            all_messages = agent.all_messages()
             print(agent.usage())
             logger.info(f"Last response: {last_response}")
-            async for message in agent.request_stream(
-                messages=all_messages,
-                model_settings=None,
-                execute_tool_call_ids=[p.tool_call_id for p in last_response.parts if isinstance(p, ToolCallPart)],
-                execute_tool_call_part=[],
-            ):
+            async for message in agent.run_tool_stream(execute_all_tool_calls=True):
                 print(message)
             print(agent.usage())
 

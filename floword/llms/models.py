@@ -1,4 +1,6 @@
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
+
+from pydantic import BaseModel
 
 from floword.log import logger
 
@@ -213,10 +215,19 @@ def _get_model_cls(provider: str) -> type["Model"]:
         return OpenAIModel
 
 
-def init_model(provider: str, model_name: str, *model_args, **model_kwargs) -> "Model":
-    model_cls = _get_model_cls(provider)
+class ModelInitParams(BaseModel):
+    provider: str
+    model_name: str
+    model_kwargs: dict[str, Any] = {}
+
+
+def init_model(model_init_params: ModelInitParams) -> "Model":
+    model_cls = _get_model_cls(model_init_params.provider)
     logger.debug(f"Initializing model {model_cls}")
-    return model_cls(model_name, *model_args, **model_kwargs)
+    return model_cls(
+        model_name=model_init_params.model_name,
+        **model_init_params.model_kwargs,
+    )
 
 
 def get_known_models(provider: str) -> list[str]:
