@@ -54,6 +54,7 @@ dev = [
     "mkdocstrings[python]>=0.26.1",
     "docker>=7.1.0",
     "pytest-asyncio>=0.25.3",
+    "inline-snapshot>=0.20.5",
 ]
 
 [build-system]

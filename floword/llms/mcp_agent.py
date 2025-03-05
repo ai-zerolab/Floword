@@ -3,7 +3,14 @@ from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 
 from mcp import Tool
-from pydantic_ai.messages import ModelMessage, ToolCallPart, ToolReturnPart
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequest,
+    SystemPromptPart,
+    ToolCallPart,
+    ToolReturnPart,
+    UserPromptPart,
+)
 from pydantic_ai.models import (
     ModelRequestParameters,
     ModelResponse,
@@ -13,7 +20,6 @@ from pydantic_ai.models import (
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import Usage
 
-from floword.llms.models import ModelInitParams, init_model
 from floword.mcp.manager import MCPManager
 
 if TYPE_CHECKING:
@@ -118,7 +124,7 @@ class McpAgent:
     async def resume_stream(
         self, model_settings: ModelSettings | None = None
     ) -> AsyncIterator[ModelResponseStreamEvent]:
-        if not self._last_conversation or not isinstance(self._last_conversation[-1], ModelRequest):
+        if not self._last_conversation or isinstance(self._last_conversation[-1], ModelResponse):
             raise AlreadyResponsedError("Already responded.")
 
         return await self._request_stream(
@@ -132,7 +138,7 @@ class McpAgent:
         model_settings: ModelSettings | None = None,
     ) -> AsyncIterator[ModelResponseStreamEvent]:
         previous_conversation = self._last_conversation or self._get_init_messages()
-        if isinstance(previous_conversation[-1], ModelRequest):
+        if isinstance(previous_conversation[-1], ModelResponse):
             raise NeedUserPromptError("Please resume the conversation.")
 
         messages = [
@@ -140,10 +146,11 @@ class McpAgent:
             ModelRequest(parts=[UserPromptPart(content=prompt)]),
         ]
 
-        return await self._request_stream(
+        async for m in self._request_stream(
             messages,
             model_settings,
-        )
+        ):
+            yield m
 
     async def run_tool_stream(
         self,
@@ -153,13 +160,14 @@ class McpAgent:
         execute_tool_call_ids: list[str] | None = None,
         execute_tool_call_part: list[ToolCallPart] | None = None,
     ) -> AsyncIterator[ModelResponseStreamEvent]:
-        return await self._request_stream(
+        async for m in self._request_stream(
             self._last_conversation or self._get_init_messages(),
             model_settings,
             execute_all_tool_calls=execute_all_tool_calls,
             execute_tool_call_ids=execute_tool_call_ids,
             execute_tool_call_part=execute_tool_call_part,
-        )
+        ):
+            yield m
 
     async def _request_stream(
         self,
@@ -178,7 +186,6 @@ class McpAgent:
             )
         if tool_return_parts:
             messages = [*messages, ModelRequest(parts=tool_return_parts)]
-
         model_request_parameters = ModelRequestParameters(
             function_tools=self._map_tools(),
             allow_text_result=True,
@@ -205,47 +212,3 @@ class McpAgent:
 
     def usage(self) -> Usage:
         return self._usage
-
-
-if __name__ == "__main__":
-    import asyncio
-    from pathlib import Path
-
-    from pydantic_ai.messages import ModelRequest, SystemPromptPart, UserPromptPart
-
-    from floword.config import Config
-    from floword.log import logger
-    from floword.mcp.manager import init_mcp_manager
-
-    async def main():
-        config = Config(mcp_config_path=(Path.cwd() / "./mcp.json").as_posix())
-        async with init_mcp_manager(config) as mcp_manager:
-            # Just a placeholder to show it's working
-            logger.info(f"MCP manager initialized with {len(mcp_manager.clients)} clients")
-
-            model = init_model(
-                ModelInitParams(
-                    provider="bedrock",
-                    model_name="anthropic.claude-3-5-sonnet-20241022-v2:0",
-                )
-            )
-
-            agent = McpAgent(
-                model=model,
-                mcp_manager=mcp_manager,
-                system_prompt="You are a helpful assistent",
-            )
-
-            async for message in agent.chat_stream(
-                "Use tool to list all files in /opt",
-            ):
-                print(message)
-
-            last_response = agent.last_response()
-            print(agent.usage())
-            logger.info(f"Last response: {last_response}")
-            async for message in agent.run_tool_stream(execute_all_tool_calls=True):
-                print(message)
-            print(agent.usage())
-
-    asyncio.run(main())

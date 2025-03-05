@@ -60,7 +60,6 @@ def test_mcp_manager_init_invalid_json(invalid_mcp_config: Path):
     return {"success": True}
 
 
-@pytest.mark.asyncio
 async def test_mcp_manager_get_tools(temp_mcp_config):
     """Test the get_tools method."""
     # Create a mock MCPManager with predefined tools
@@ -81,7 +80,6 @@ async def test_mcp_manager_get_tools(temp_mcp_config):
     assert tools["server2"] == [tool2]
 
 
-@pytest.mark.asyncio
 async def test_init_mcp_manager_context_manager(temp_mcp_config):
     """Test the init_mcp_manager context manager."""
     config = Config(temp_mcp_config)
@@ -136,7 +134,6 @@ class TestMCPManagerWithMocks:
 
         return manager
 
-    @pytest.mark.asyncio
     async def test_call_tool_with_string_args(self, monkeypatch, mock_manager):
         """Test calling a tool with string arguments."""
 
@@ -152,7 +149,6 @@ class TestMCPManagerWithMocks:
         result = await mock_manager.call_tool("server1", "test_tool", '{"arg1": "value1"}')
         assert result == "tool result"
 
-    @pytest.mark.asyncio
     async def test_call_tool_with_dict_args(self, monkeypatch, mock_manager):
         """Test calling a tool with dict arguments."""
 
