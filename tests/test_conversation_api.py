@@ -2,7 +2,12 @@ import pytest
 from inline_snapshot import Is, snapshot
 from pydantic_ai.usage import Usage
 
-from floword.router.api.params import ConversionInfo, QueryConversations
+from floword.router.api.params import (
+    ChatRequest,
+    ConversionInfo,
+    PermitCallToolRequest,
+    QueryConversations,
+)
 
 API_BASE_URL = "/api/v1/conversation"
 
@@ -85,3 +90,43 @@ def test_crud_conversation(client):
         f"{API_BASE_URL}/info/{conversation_id}",
     )
     assert response.status_code == 404
+
+
+@pytest.fixture(autouse=True)
+def reset_sse_starlette_appstatus_event():
+    """
+    Fixture that resets the appstatus event in the sse_starlette app.
+
+    Should be used on any test that uses sse_starlette to stream events.
+    """
+    # See https://github.com/sysid/sse-starlette/issues/59
+    from sse_starlette.sse import AppStatus
+
+    AppStatus.should_exit_event = None
+
+
+def test_chat_and_permit_tool_call(client):
+    conversation_id = create_conversation(client)
+    response = client.post(
+        f"{API_BASE_URL}/chat/{conversation_id}",
+        data=ChatRequest(prompt="Hello world").model_dump_json(),
+    )
+    assert response.status_code == 200
+    response = client.get(
+        f"{API_BASE_URL}/info/{conversation_id}",
+    )
+    assert response.status_code == 200
+    response_data = ConversionInfo.model_validate(response.json())
+    assert len(response_data.messages) == snapshot(3)
+
+    response = client.post(
+        f"{API_BASE_URL}/permit-call-tool/{conversation_id}",
+        data=PermitCallToolRequest(execute_all_tool_calls=True).model_dump_json(),
+    )
+    assert response.status_code == 200
+    response = client.get(
+        f"{API_BASE_URL}/info/{conversation_id}",
+    )
+    assert response.status_code == 200
+    response_data = ConversionInfo.model_validate(response.json())
+    assert len(response_data.messages) == snapshot(5)

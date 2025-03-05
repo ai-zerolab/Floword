@@ -42,6 +42,7 @@ class ConversionInfo(BaseModel):
 
 class RedactableCompletion(BaseModel):
     llm_config: ModelInitParams | None = None
+    llm_model_settings: dict | None = None
     redacted_messages: list[ModelMessage] | None = None
 
 

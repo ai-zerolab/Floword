@@ -81,7 +81,7 @@ class MCPAgent:
         call_tool_result = await self.mcp_manager.call_tool(server_name, tool_name, tool_call_part.args)
         return ToolReturnPart(
             tool_name=tool_call_part.tool_name,
-            content=call_tool_result,
+            content=call_tool_result.model_dump(),
             tool_call_id=tool_call_part.tool_call_id,
         )
 

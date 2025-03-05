@@ -1,9 +1,18 @@
 from __future__ import annotations
 
+import dataclasses
+import json
 from collections.abc import AsyncIterator
+from datetime import datetime
+from typing import Any, get_args
 
 from fastapi import Depends, HTTPException, status
-from pydantic_ai.messages import ModelResponseStreamEvent
+from pydantic_ai.messages import (
+    ModelMessage,
+    ModelRequestPart,
+    ModelResponsePart,
+    ModelResponseStreamEvent,
+)
 from pydantic_ai.models import Model
 from pydantic_ai.usage import Usage
 from sqlalchemy import delete, select, update
@@ -24,6 +33,77 @@ from floword.router.api.params import (
     RedactableCompletion,
 )
 from floword.users import User
+
+
+class DateTimeEncoder(json.JSONEncoder):
+    """JSON encoder that handles datetime objects."""
+
+    def default(self, obj):
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
+
+def dataclass_to_dict(obj: Any) -> dict:
+    """
+    Convert a dataclass instance to a dictionary, handling nested dataclasses and datetime objects.
+    """
+    if dataclasses.is_dataclass(obj):
+        result = {}
+        for field in dataclasses.fields(obj):
+            value = getattr(obj, field.name)
+            if dataclasses.is_dataclass(value):
+                result[field.name] = dataclass_to_dict(value)
+            elif isinstance(value, list):
+                result[field.name] = [
+                    dataclass_to_dict(item) if dataclasses.is_dataclass(item) else item for item in value
+                ]
+            elif isinstance(value, dict):
+                result[field.name] = {
+                    k: dataclass_to_dict(v) if dataclasses.is_dataclass(v) else v for k, v in value.items()
+                }
+            elif isinstance(value, datetime):
+                result[field.name] = value.isoformat()
+            else:
+                result[field.name] = value
+        return result
+    return obj
+
+
+def _to_one_model_message(message: dict, concrete_types: type[ModelMessage]) -> ModelMessage:
+    for t in concrete_types:
+        if message.get("kind") != t.kind:
+            continue
+        message["parts"] = _to_parts(message["parts"])
+        return t(**message)
+    raise ValueError(f"Unknown message: {message}")
+
+
+def _to_parts(parts: list[dict | None]) -> list[ModelResponsePart | ModelRequestPart]:
+    if parts is None:
+        return None
+
+    concrete_types = get_args(get_args(ModelRequestPart)[0]) + get_args(get_args(ModelResponsePart)[0])
+    return [_to_one_part(part, concrete_types) for part in parts]
+
+
+def _to_one_part(part: dict | None, concrete_types: list[type[ModelRequestPart | ModelResponsePart]]):
+    if part is None:
+        return None
+
+    for t in concrete_types:
+        if part.get("part_kind") != t.part_kind:
+            continue
+        return t(**part)
+    raise ValueError(f"Unknown part: {part}")
+
+
+def to_model_messages(messages: list[dict | None]) -> list[ModelMessage]:
+    if messages is None:
+        return None
+
+    concrete_types = get_args(get_args(ModelMessage)[0])
+    return [_to_one_model_message(message, concrete_types) for message in messages]
 
 
 def get_conversation_controller(
@@ -143,6 +223,17 @@ class ConversationController:
             usage=conversation.usage or Usage(),
         )
 
+    async def _update_conversation(self, conversation_id: str, messages: list[ModelMessage], usage: Usage):
+        # Convert dataclasses to dictionaries
+        messages_dict = [dataclass_to_dict(message) for message in messages]
+        usage_dict = dataclass_to_dict(usage)
+        await self.session.execute(
+            update(Conversation)
+            .where(Conversation.conversation_id == conversation_id)
+            .values(messages=messages_dict, usage=usage_dict)
+        )
+        await self.session.commit()
+
     async def chat(
         self, user: User, conversation_id: str, params: ChatRequest
     ) -> AsyncIterator[ModelResponseStreamEvent]:
@@ -158,22 +249,14 @@ class ConversationController:
             model=self.get_model(params),
             mcp_manager=self.mcp_manager,
             system_prompt=params.system_prompt or self.default_system_prompt,
-            last_conversation=params.redacted_messages or conversation.messages,
-            usage=conversation.usage or Usage(),
+            last_conversation=params.redacted_messages or to_model_messages(conversation.messages),
+            usage=Usage(**(conversation.usage or {})),
         )
 
-        async for part in agent.chat_stream(params.prompt):
+        async for part in agent.chat_stream(params.prompt, model_settings=params.llm_model_settings):
             yield part
 
-        await self.session.execute(
-            update(Conversation)
-            .where(Conversation.conversation_id == conversation_id)
-            .values(
-                messages=agent.all_messages(),
-                usage=agent.usage(),
-            )
-        )
-        await self.session.commit()
+        await self._update_conversation(conversation_id, agent.all_messages(), agent.usage())
 
     async def permit_call_tool(
         self, user: User, conversation_id: str, params: PermitCallToolRequest
@@ -189,23 +272,18 @@ class ConversationController:
         agent = MCPAgent(
             model=self.get_model(params),
             mcp_manager=self.mcp_manager,
-            system_prompt=params.system_prompt or self.default_system_prompt,
-            last_conversation=params.redacted_messages or conversation.messages,
-            usage=conversation.usage or Usage(),
+            system_prompt=self.default_system_prompt,
+            last_conversation=params.redacted_messages or to_model_messages(conversation.messages),
+            usage=Usage(**(conversation.usage or {})),
         )
-
-        async for part in agent.run_tool_stream(params.prompt):
+        async for part in agent.run_tool_stream(
+            model_settings=params.llm_model_settings,
+            execute_all_tool_calls=params.execute_all_tool_calls,
+            execute_tool_call_ids=params.execute_tool_call_ids,
+            execute_tool_call_part=params.execute_tool_call_part,
+        ):
             yield part
-
-        await self.session.execute(
-            update(Conversation)
-            .where(Conversation.conversation_id == conversation_id)
-            .values(
-                messages=agent.all_messages(),
-                usage=agent.usage(),
-            )
-        )
-        await self.session.commit()
+        await self._update_conversation(conversation_id, agent.all_messages(), agent.usage())
 
     async def delete_conversation(self, user: User, conversation_id: str) -> None:
         result = await self.session.execute(select(Conversation).where(Conversation.conversation_id == conversation_id))

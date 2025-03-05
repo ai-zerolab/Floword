@@ -9,6 +9,15 @@ def get_config() -> Config:
     return Config()
 
 
+DEFAULT_CONVERSATION_SYSTEM_PROMPT = """
+You are a helpful assistant.
+"""
+
+DEFAULT_WORKFLOW_SYSTEM_PROMPT = """
+You are a helpful assistant.
+"""
+
+
 class Config(BaseSettings):
     """
     Complex types like list, set, dict, and sub-models are populated from the environment by treating the environment variable's value as a JSON-encoded string.
@@ -29,9 +38,8 @@ class Config(BaseSettings):
     default_model_name: str | None = None
     default_model_kwargs: dict | None = None
 
-    default_conversation_system_prompt: str | None = None
-    default_workflow_system_prompt: str | None = None
-
+    default_conversation_system_prompt: str = DEFAULT_CONVERSATION_SYSTEM_PROMPT
+    default_workflow_system_prompt: str = DEFAULT_WORKFLOW_SYSTEM_PROMPT
     mcp_config_path: str = (Path.cwd() / "./mcp.json").expanduser().resolve().absolute().as_posix()
 
     model_config = SettingsConfigDict(env_prefix="floword_", case_sensitive=False, frozen=True, env_file=".env")

@@ -88,7 +88,7 @@ async def chat(
     )
 
 
-@router.post("/permit-call-tool")
+@router.post("/permit-call-tool/{conversation_id}")
 async def run(
     conversation_id: str,
     params: PermitCallToolRequest,

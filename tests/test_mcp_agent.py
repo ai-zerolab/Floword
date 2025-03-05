@@ -59,7 +59,7 @@ async def test_mcp_agent_plain_response(agent_builder):
         PartDeltaEvent(
             index=0,
             delta=TextPartDelta(
-                content_delta='{"mock-echo_text":{"_meta":null,"content":[{"type":"text","text":"a","annotations":null}],"isError":false},"mock-get_user_info":{"_meta":null,"content":[{"type":"text","text":"{\\"id\\": '
+                content_delta='{"mock-echo_text":{"meta":null,"content":[{"type":"text","text":"a","annotations":null}],"isError":false},"mock-get_user_info":{"meta":null,"content":[{"type":"text","text":"{\\"id\\": '
             ),
         ),
         PartDeltaEvent(index=0, delta=TextPartDelta(content_delta="0, ")),
@@ -70,7 +70,7 @@ async def test_mcp_agent_plain_response(agent_builder):
         PartDeltaEvent(
             index=0,
             delta=TextPartDelta(
-                content_delta='\\"user0@example.com\\"}","annotations":null}],"isError":false},"mock-raise_error":{"_meta":null,"content":[{"type":"text","text":"Error '
+                content_delta='\\"user0@example.com\\"}","annotations":null}],"isError":false},"mock-raise_error":{"meta":null,"content":[{"type":"text","text":"Error '
             ),
         ),
         PartDeltaEvent(index=0, delta=TextPartDelta(content_delta="executing ")),
@@ -81,7 +81,7 @@ async def test_mcp_agent_plain_response(agent_builder):
         PartDeltaEvent(
             index=0,
             delta=TextPartDelta(
-                content_delta='occurred","annotations":null}],"isError":true},"mock-complex_operation":{"_meta":null,"content":[{"type":"text","text":"{\\"processed\\": '
+                content_delta='occurred","annotations":null}],"isError":true},"mock-complex_operation":{"meta":null,"content":[{"type":"text","text":"{\\"processed\\": '
             ),
         ),
         PartDeltaEvent(index=0, delta=TextPartDelta(content_delta="true, ")),

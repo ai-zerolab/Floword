@@ -207,6 +207,10 @@ def _get_model_cls(provider: str) -> type["Model"]:
         from pydantic_ai.models.mistral import MistralModel
 
         return MistralModel
+    elif provider == "test":
+        from pydantic_ai.models.test import TestModel
+
+        return TestModel
     else:
         from pydantic_ai.models.openai import OpenAIModel
 
@@ -228,7 +232,7 @@ def get_default_model(config: Config = Depends(get_config)) -> Model | None:
         ModelInitParams(
             provider=config.default_model_provider,
             model_name=config.default_model_name,
-            model_kwargs=config.default_model_kwargs,
+            model_kwargs=config.default_model_kwargs or {},
         )
     )
 

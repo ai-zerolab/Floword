@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import json
 import os
-import tempfile
-
-from floword.mcp.manager import get_mcp_manager
 
 os.environ["LOGURU_LEVEL"] = "DEBUG"
 
+import json
 import socket
+import tempfile
 import time
 from pathlib import Path
 from uuid import uuid4
@@ -17,12 +15,15 @@ import docker
 import pytest
 from click.testing import CliRunner
 from fastapi.testclient import TestClient
+from pydantic_ai.models.test import TestModel
 from sqlalchemy import create_engine, text
 
 from floword.app import app as APP
 from floword.cli import clear, migrate
 from floword.config import get_config
 from floword.dbutils import open_db_session
+from floword.llms.models import get_default_model
+from floword.mcp.manager import get_mcp_manager
 
 TEST_DB_SETTINGS = {
     "FLOWORD_USE_POSTGRES": "true",
@@ -148,7 +149,8 @@ def app(request, monkeypatch, pgsql_env, sqlite_env, temp_mcp_config):
         monkeypatch.setenv(env, value)
 
     monkeypatch.setenv("FLOWORD_MCP_CONFIG_PATH", temp_mcp_config.as_posix())
-
+    monkeypatch.setenv("FLOWORD_DEFAULT_MODEL_PROVIDER", "test")
+    monkeypatch.setenv("FLOWORD_DEFAULT_MODEL_NAME", "mock")
     runner = CliRunner()
     result = runner.invoke(
         clear,
@@ -162,7 +164,10 @@ def app(request, monkeypatch, pgsql_env, sqlite_env, temp_mcp_config):
     async def _get_mcp_manager():
         return await get_mcp_manager(config)
 
-    APP.dependency_overrides = {get_mcp_manager: _get_mcp_manager}
+    APP.dependency_overrides = {
+        get_mcp_manager: _get_mcp_manager,
+        get_default_model: lambda: TestModel(),
+    }
     yield APP
 
 

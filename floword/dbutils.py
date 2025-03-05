@@ -107,7 +107,7 @@ def create_async_engine(url, **kwargs):
     # Common engine settings for all database types
     engine_kwargs.update({
         "echo": False,  # Set to True for SQL query logging
-        "pool_pre_ping": True,  # Verify connections before using them
+        # "pool_pre_ping": True,  # Verify connections before using them
     })
 
     parsed_url = urlparse(url)
@@ -156,7 +156,7 @@ def create_engine(url, **kwargs):
     # Common engine settings for all database types
     engine_kwargs.update({
         "echo": False,  # Set to True for SQL query logging
-        "pool_pre_ping": True,  # Verify connections before using them
+        # "pool_pre_ping": True,  # Verify connections before using them
     })
 
     parsed_url = urlparse(url)
