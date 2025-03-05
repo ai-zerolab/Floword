@@ -4,7 +4,7 @@ import json
 import os
 import tempfile
 
-from floword.mcp.manager import MCPManager, get_mcp_manager
+from floword.mcp.manager import get_mcp_manager
 
 os.environ["LOGURU_LEVEL"] = "DEBUG"
 
@@ -156,10 +156,13 @@ def app(request, monkeypatch, pgsql_env, sqlite_env, temp_mcp_config):
         env=dict(db_env),
     )
     assert result.exit_code == 0
+    config = get_config()
+    assert config.mcp_config_path == temp_mcp_config.as_posix()
 
-    # Dependencies injection mock
-    mock_mcp_manager = MCPManager(temp_mcp_config)
-    APP.dependency_overrides = {get_mcp_manager: lambda: mock_mcp_manager}
+    async def _get_mcp_manager():
+        return await get_mcp_manager(config)
+
+    APP.dependency_overrides = {get_mcp_manager: _get_mcp_manager}
     yield APP
 
 

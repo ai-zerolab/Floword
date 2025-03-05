@@ -174,7 +174,6 @@ class ConversationController:
             )
         )
         await self.session.commit()
-        return
 
     async def permit_call_tool(
         self, user: User, conversation_id: str, params: PermitCallToolRequest
@@ -207,7 +206,6 @@ class ConversationController:
             )
         )
         await self.session.commit()
-        return
 
     async def delete_conversation(self, user: User, conversation_id: str) -> None:
         result = await self.session.execute(select(Conversation).where(Conversation.conversation_id == conversation_id))

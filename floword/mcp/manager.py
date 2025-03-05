@@ -38,13 +38,18 @@ async def get_mcp_manager(config: Config = Depends(get_config)):
 async def init_mcp_manager(config: Config):
     mcp_manager = _get_mcp_manager(config.mcp_config_path)
     await mcp_manager.initialize()
+    logger.info("MCP manager initialized")
     yield mcp_manager
     await mcp_manager.cleanup()
     logger.info("MCP manager disposed")
 
 
+def _get_mcp_manager(config_path: PathLike) -> MCPManager:
+    return _init_mcp_manager_singleton(Path(config_path).expanduser().resolve().absolute().as_posix())
+
+
 @cache
-def _get_mcp_manager(config_path: PathLike):
+def _init_mcp_manager_singleton(config_path: str) -> MCPManager:
     return MCPManager(config_path)
 
 

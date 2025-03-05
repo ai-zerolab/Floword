@@ -1,4 +1,4 @@
-from typing import Any, Literal
+from typing import Any
 
 from fastapi import Depends
 from pydantic import BaseModel
@@ -7,7 +7,7 @@ from pydantic_ai.models import Model
 from floword.config import Config, get_config
 from floword.log import logger
 
-SUPPORTED_PROVIDERS = Literal[
+SUPPORTED_PROVIDERS = [
     "openai",
     "anthropic",
     "bedrock",

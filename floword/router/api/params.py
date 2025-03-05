@@ -2,16 +2,22 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+from mcp import Tool
 from pydantic import BaseModel, Field
 from pydantic_ai.messages import ModelMessage, ToolCallPart
 from pydantic_ai.usage import Usage
 
 from floword.llms.models import ModelInitParams
+from floword.mcp.manager import ServerName
 
 
 class GetModelsResponse(BaseModel):
     providers: list[str]
     models: dict[str, list[str]]
+
+
+class GetMcpServersResponse(BaseModel):
+    servers: dict[ServerName, list[Tool]]
 
 
 class NewConversation(BaseModel):
