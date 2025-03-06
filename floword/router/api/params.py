@@ -17,7 +17,9 @@ class GetModelsResponse(BaseModel):
 
 
 class GetMcpServersResponse(BaseModel):
-    servers: dict[ServerName, list[Tool]]
+    activate_servers: dict[ServerName, list[Tool]]
+    disabled_servers: list[str]
+    failed_servers: dict[str, dict[str, str]]
 
 
 class NewConversation(BaseModel):

@@ -19,4 +19,13 @@ async def get_provider_and_models() -> GetModelsResponse:
 async def get_mcp(
     mcp_manager: MCPManager = Depends(get_mcp_manager),
 ) -> GetMcpServersResponse:
-    return GetMcpServersResponse(servers=mcp_manager.get_tools())
+    return GetMcpServersResponse(
+        activate_servers=mcp_manager.get_tools(),
+        disabled_servers=mcp_manager.disabled_clients,
+        failed_servers={
+            server_name: {
+                "error": str(exception),
+            }
+            for server_name, (_, exception) in mcp_manager.failed_clients.items()
+        },
+    )
