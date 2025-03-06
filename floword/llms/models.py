@@ -1,14 +1,13 @@
-from typing import TYPE_CHECKING, Any, Literal
+from typing import Any
 
+from fastapi import Depends
 from pydantic import BaseModel
+from pydantic_ai.models import Model
 
+from floword.config import Config, get_config
 from floword.log import logger
 
-if TYPE_CHECKING:
-    from pydantic_ai.models import Model
-
-
-SUPPORTED_PROVIDERS = Literal[
+SUPPORTED_PROVIDERS = [
     "openai",
     "anthropic",
     "bedrock",
@@ -208,6 +207,10 @@ def _get_model_cls(provider: str) -> type["Model"]:
         from pydantic_ai.models.mistral import MistralModel
 
         return MistralModel
+    elif provider == "test":
+        from pydantic_ai.models.test import TestModel
+
+        return TestModel
     else:
         from pydantic_ai.models.openai import OpenAIModel
 
@@ -221,13 +224,34 @@ class ModelInitParams(BaseModel):
     model_kwargs: dict[str, Any] = {}
 
 
-def init_model(model_init_params: ModelInitParams) -> "Model":
+def get_default_model(config: Config = Depends(get_config)) -> Model | None:
+    if not config.default_model_name:
+        return None
+
+    return init_model(
+        ModelInitParams(
+            provider=config.default_model_provider,
+            model_name=config.default_model_name,
+            model_kwargs=config.default_model_kwargs or {},
+        )
+    )
+
+
+def init_model(model_init_params: ModelInitParams) -> Model:
     model_cls = _get_model_cls(model_init_params.provider)
     logger.debug(f"Initializing model {model_cls}")
     return model_cls(
         model_name=model_init_params.model_name,
         **model_init_params.model_kwargs,
     )
+
+
+def get_supported_providers() -> list[str]:
+    return SUPPORTED_PROVIDERS
+
+
+def get_all_known_models() -> dict[str, list[str]]:
+    return KNOWN_MODELS
 
 
 def get_known_models(provider: str) -> list[str]:

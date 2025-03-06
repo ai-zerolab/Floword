@@ -22,10 +22,12 @@ ServerParams = TypeVar("ServerParams", StdioServerParameters, SSEServerParameter
 
 
 class MCPClient:
+    server_name: str
     server_params: ServerParams
 
-    def __init__(self, server_params: ServerParams):
+    def __init__(self, server_name: str, server_params: ServerParams):
         # Initialize session and client objects
+        self.server_name = server_name
         self.session: ClientSession | None = None
         self.exit_stack = AsyncExitStack()
 

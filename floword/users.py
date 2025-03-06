@@ -19,7 +19,7 @@ class User(BaseModel):
 
     @classmethod
     def init_annonymous(cls) -> User:
-        return User()
+        return User(user_id="_anonymous")
 
     @classmethod
     def from_jwt_token(cls, jwt_token: str, jwt_secret_token: str) -> User:

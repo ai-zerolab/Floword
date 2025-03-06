@@ -1,15 +1,13 @@
 from __future__ import annotations
 
-import json
 import os
-
-from floword.mcp.manager import MCPManager, get_mcp_manager
 
 os.environ["LOGURU_LEVEL"] = "DEBUG"
 
+import json
 import socket
+import tempfile
 import time
-from collections.abc import Generator, Iterable
 from pathlib import Path
 from uuid import uuid4
 
@@ -17,12 +15,15 @@ import docker
 import pytest
 from click.testing import CliRunner
 from fastapi.testclient import TestClient
+from pydantic_ai.models.test import TestModel
 from sqlalchemy import create_engine, text
 
 from floword.app import app as APP
 from floword.cli import clear, migrate
 from floword.config import get_config
 from floword.dbutils import open_db_session
+from floword.llms.models import get_default_model
+from floword.mcp.manager import get_mcp_manager
 
 TEST_DB_SETTINGS = {
     "FLOWORD_USE_POSTGRES": "true",
@@ -96,50 +97,77 @@ def pg_port(docker_client: docker.DockerClient):
 
 
 @pytest.fixture(
+    scope="session",
+)
+def pgsql_env(pg_port):
+    envs = [
+        *list(TEST_DB_SETTINGS.items()),
+        ("FLOWORD_PG_PORT", str(pg_port)),
+    ]
+    runner = CliRunner()
+    result = runner.invoke(
+        migrate,
+        env=dict(envs),
+    )
+    assert result.exit_code == 0
+    yield envs
+
+
+@pytest.fixture(
+    scope="session",
+)
+def sqlite_env():
+    with tempfile.NamedTemporaryFile() as fp:
+        envs = [
+            ("FLOWORD_USE_POSTGRES", "false"),
+            ("FLOWORD_SQLITE_FILE_PATH", str(fp.name)),
+        ]
+        runner = CliRunner()
+        result = runner.invoke(
+            migrate,
+            env=dict(envs),
+        )
+        assert result.exit_code == 0
+        yield envs
+
+
+@pytest.fixture(
     params=[
         "sqlite",
         "postgres",
     ]
 )
-def db_env(request, pg_port, tmp_path) -> Generator[Iterable[tuple[str, str]], None, None]:
-    sqlite_path = tmp_path / "floword.sqlite"
+def app(request, monkeypatch, pgsql_env, sqlite_env, temp_mcp_config):
     if request.param == "sqlite":
-        yield [
-            ("FLOWORD_USE_POSTGRES", "false"),
-            ("FLOWORD_SQLITE_FILE_PATH", str(sqlite_path)),
-        ]
+        db_env = sqlite_env
     elif request.param == "postgres":
-        envs = list(TEST_DB_SETTINGS.items())
-        yield [
-            *envs,
-            ("FLOWORD_PG_PORT", str(pg_port)),
-        ]
+        db_env = pgsql_env
+    else:
+        raise ValueError(f"Unknown database type: {request.param}")
 
-
-@pytest.fixture
-def app(monkeypatch, db_env, temp_mcp_config):
     for env, value in db_env:
         monkeypatch.setenv(env, value)
 
     monkeypatch.setenv("FLOWORD_MCP_CONFIG_PATH", temp_mcp_config.as_posix())
-
+    monkeypatch.setenv("FLOWORD_DEFAULT_MODEL_PROVIDER", "test")
+    monkeypatch.setenv("FLOWORD_DEFAULT_MODEL_NAME", "mock")
     runner = CliRunner()
-    result = runner.invoke(
-        migrate,
-        env=dict(db_env),
-    )
-    assert result.exit_code == 0
-    # Drop all before testing
     result = runner.invoke(
         clear,
         ["--yes"],
         env=dict(db_env),
     )
     assert result.exit_code == 0
+    config = get_config()
+    assert config.mcp_config_path == temp_mcp_config.as_posix()
 
-    # Dependencies injection mock
-    mock_mcp_manager = MCPManager(temp_mcp_config)
-    APP.dependency_overrides = {get_mcp_manager: lambda: mock_mcp_manager}
+    async def _get_mcp_manager():
+        return await get_mcp_manager(config)
+
+    APP.dependency_overrides = {
+        get_mcp_manager: _get_mcp_manager,
+        get_default_model: lambda: TestModel(),
+    }
     yield APP
 
 

@@ -38,13 +38,18 @@ async def get_mcp_manager(config: Config = Depends(get_config)):
 async def init_mcp_manager(config: Config):
     mcp_manager = _get_mcp_manager(config.mcp_config_path)
     await mcp_manager.initialize()
+    logger.info("MCP manager initialized")
     yield mcp_manager
     await mcp_manager.cleanup()
     logger.info("MCP manager disposed")
 
 
+def _get_mcp_manager(config_path: PathLike) -> MCPManager:
+    return _init_mcp_manager_singleton(Path(config_path).expanduser().resolve().absolute().as_posix())
+
+
 @cache
-def _get_mcp_manager(config_path: PathLike):
+def _init_mcp_manager_singleton(config_path: str) -> MCPManager:
     return MCPManager(config_path)
 
 
@@ -77,7 +82,7 @@ class MCPManager:
 
         self.mcp_config = MCPConfig.model_validate(mcp_configs)
         self.clients = {
-            escape(server_name): MCPClient(server_params)
+            escape(server_name): MCPClient(server_name, server_params)
             for server_name, server_params in self.mcp_config.mcp_servers.items()
             if server_name not in self.disabled_clients
         }
@@ -113,6 +118,7 @@ class MCPManager:
         if isinstance(args, str):
             args = json.loads(args)
 
+        logger.info(f"Calling tool {tool_name} on {server_name}")
         return await self.clients[server_name].call_tool(tool_name, args)
 
     def get_tools(self) -> dict[ServerName, list[Tool]]:
