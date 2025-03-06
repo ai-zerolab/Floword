@@ -49,8 +49,8 @@ Available options:
 - `FLOWORD_DEFAULT_MODEL_PROVIDER`: Default LLM provider. Default: `openai`
 - `FLOWORD_DEFAULT_MODEL_NAME`: Default model name. Default: `None`
 - `FLOWORD_DEFAULT_MODEL_KWARGS`: Additional arguments for the model (as JSON string). Default: `None`
-- `FLOWORD_DEFAULT_CONVERSATION_SYSTEM_PROMPT`: Default system prompt for conversations. Default: `"You are a helpful assistant."`
-- `FLOWORD_DEFAULT_WORKFLOW_SYSTEM_PROMPT`: Default system prompt for workflows. Default: `"You are a helpful assistant."`
+- `FLOWORD_DEFAULT_CONVERSATION_SYSTEM_PROMPT`: Default system prompt for conversations. Default: Content from `floword/prompts/system-conversation.md`
+- `FLOWORD_DEFAULT_WORKFLOW_SYSTEM_PROMPT`: Default system prompt for workflows. Default: Content from `floword/prompts/system-workflow.md`
 
 ### Config MCP Server
 
