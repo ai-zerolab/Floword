@@ -166,7 +166,7 @@ def test_mcp(client):
     response = client.get("/api/config/mcp")
     assert response.status_code == 200
     assert response.json() == snapshot({
-        "servers": {
+        "activate_servers": {
             "mock": [
                 {
                     "name": "echo_text",
@@ -218,5 +218,7 @@ def test_mcp(client):
                     },
                 },
             ]
-        }
+        },
+        "disabled_servers": ["disabled-mock"],
+        "failed_servers": {},
     })
