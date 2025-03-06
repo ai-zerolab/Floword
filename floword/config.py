@@ -4,18 +4,16 @@ from pathlib import Path
 
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+_HERE = Path(__file__).parent
+
 
 def get_config() -> Config:
     return Config()
 
 
-DEFAULT_CONVERSATION_SYSTEM_PROMPT = """
-You are a helpful assistant.
-"""
+DEFAULT_CONVERSATION_SYSTEM_PROMPT = (_HERE / "prompts" / "system-conversation.md").read_text()
 
-DEFAULT_WORKFLOW_SYSTEM_PROMPT = """
-You are a helpful assistant.
-"""
+DEFAULT_WORKFLOW_SYSTEM_PROMPT = (_HERE / "prompts" / "system-workflow.md").read_text()
 
 
 class Config(BaseSettings):

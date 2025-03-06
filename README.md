@@ -24,6 +24,10 @@ powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | ie
 
 Then you can use `uvx floword@latest strat` as commands for running the floword server.
 
+Docker is also supported. You can use `docker pull ghcr.io/ai-zerolab/floword:latest` to pull the image from Github Container Registry.
+
+(WIP) You can found deployment instructions in [deploy](./deploy) directory.
+
 ## Configuration
 
 ### Via Environment Variables
@@ -33,10 +37,12 @@ You can use `.env` file or environment variables to configure floword. All envir
 Available options:
 
 #### Authentication
+
 - `FLOWORD_JWT_SECRET_TOKEN`: Secret token for JWT authentication. Default: `None`
 - `FLOWORD_ALLOW_ANONYMOUS`: Allow anonymous access. Default: `True`
 
 #### Database Configuration
+
 - `FLOWORD_SQLITE_FILE_PATH`: Path to SQLite database file. Default: `./floword.sqlite` (in current working directory)
 - `FLOWORD_USE_POSTGRES`: Use PostgreSQL instead of SQLite. Default: `False`
 - `FLOWORD_PG_USER`: PostgreSQL username. Default: `postgres`
@@ -46,11 +52,12 @@ Available options:
 - `FLOWORD_PG_DATABASE`: PostgreSQL database name. Default: `floword`
 
 #### Model Configuration
+
 - `FLOWORD_DEFAULT_MODEL_PROVIDER`: Default LLM provider. Default: `openai`
 - `FLOWORD_DEFAULT_MODEL_NAME`: Default model name. Default: `None`
 - `FLOWORD_DEFAULT_MODEL_KWARGS`: Additional arguments for the model (as JSON string). Default: `None`
-- `FLOWORD_DEFAULT_CONVERSATION_SYSTEM_PROMPT`: Default system prompt for conversations. Default: `"You are a helpful assistant."`
-- `FLOWORD_DEFAULT_WORKFLOW_SYSTEM_PROMPT`: Default system prompt for workflows. Default: `"You are a helpful assistant."`
+- `FLOWORD_DEFAULT_CONVERSATION_SYSTEM_PROMPT`: Default system prompt for conversations. Default: Content from `floword/prompts/system-conversation.md`
+- `FLOWORD_DEFAULT_WORKFLOW_SYSTEM_PROMPT`: Default system prompt for workflows. Default: Content from `floword/prompts/system-workflow.md`
 
 ### Config MCP Server
 
