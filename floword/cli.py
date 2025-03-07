@@ -23,6 +23,16 @@ def _migrate():
 
 
 @click.command()
+def ui():
+    """
+    Start the UI.
+    """
+    from floword.ui.app import main as ui_app
+
+    ui_app()
+
+
+@click.command()
 @click.option("--host", type=click.STRING, default="localhost")
 @click.option("--port", type=click.INT, default=9772)
 @click.option("--auto-migrate", type=click.BOOL, default=True, envvar="FLOWORD_AUTO_MIGRATE")
@@ -67,4 +77,5 @@ def cli():
 
 cli.add_command(migrate)
 cli.add_command(start)
+cli.add_command(ui)
 # cli.add_command(clear) # noqa: not visible in CLI

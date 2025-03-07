@@ -83,6 +83,12 @@ async def chat(
     user: User = Depends(get_current_user),
     conversation_controller: ConversationController = Depends(get_conversation_controller),
 ) -> EventSourceResponse:
+    """
+    SSE, first data part is ModelRequest for prompt.
+
+    Then each data part is ModelResponseStreamEvent. Client need to handle it.
+    """
+
     return EventSourceResponse(
         conversation_controller.chat(user, conversation_id, params),
         ping=True,
@@ -96,6 +102,11 @@ async def run(
     user: User = Depends(get_current_user),
     conversation_controller: ConversationController = Depends(get_conversation_controller),
 ) -> EventSourceResponse:
+    """
+    SSE, first data part is ModelRequest for tool.
+
+    Then each data part is ModelResponseStreamEvent. Client need to handle it.
+    """
     return EventSourceResponse(
         conversation_controller.permit_call_tool(user, conversation_id, params),
         ping=True,

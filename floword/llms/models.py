@@ -219,8 +219,8 @@ def _get_model_cls(provider: str) -> type["Model"]:
 
 
 class ModelInitParams(BaseModel):
-    provider: str
-    model_name: str
+    provider: str | None = None
+    model_name: str | None = None
     model_kwargs: dict[str, Any] = {}
 
 

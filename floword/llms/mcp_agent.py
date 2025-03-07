@@ -20,6 +20,7 @@ from pydantic_ai.models import (
 from pydantic_ai.tools import ToolDefinition
 from pydantic_ai.usage import Usage
 
+from floword.log import logger
 from floword.mcp.manager import MCPManager
 
 if TYPE_CHECKING:
@@ -74,11 +75,10 @@ class MCPAgent:
         return server_name, tool_name
 
     def _map_tools(self) -> list[ToolDefinition]:
-        return [
-            tool_def
-            for server_name, tools in self.mcp_manager.get_tools().items()
-            for tool_def in self._get_tool_definitions(server_name, tools)
-        ]
+        r = []
+        for server_name, tools in self.mcp_manager.get_tools().items():
+            r.extend(self._get_tool_definitions(server_name, tools))
+        return r
 
     async def _execute_one_tool_call_part(self, tool_call_part: ToolCallPart) -> ToolReturnPart:
         server_name, tool_name = self._dispatch_tool_definition_name(tool_call_part.tool_name)
@@ -144,6 +144,7 @@ class MCPAgent:
         prompt: str,
         model_settings: ModelSettings | None = None,
     ) -> AsyncIterator[ModelResponseStreamEvent | ModelRequest]:
+        logger.info(f"Starting conversation with prompt: {prompt}")
         if self._last_conversation and not isinstance(self._last_conversation[-1], ModelResponse):
             raise NeedUserPromptError("Please resume the conversation.")
 
@@ -168,6 +169,7 @@ class MCPAgent:
         execute_tool_call_ids: list[str] | None = None,
         execute_tool_call_part: list[ToolCallPart] | None = None,
     ) -> AsyncIterator[ModelResponseStreamEvent | ModelRequest]:
+        logger.info(f"Handling tool call: {execute_all_tool_calls}, {execute_tool_call_ids}, {execute_tool_call_part}")
         messages = self._last_conversation or self._get_init_messages()
         if execute_all_tool_calls:
             tool_return_parts = await self._execute_all_tool_calls(messages[-1])
