@@ -1,6 +1,6 @@
 {
   "mcpServers": {
-    "zerolab-toolbox": {
+    "toolbox": {
       "args": [
         "mcp-toolbox@latest",
         "stdio"

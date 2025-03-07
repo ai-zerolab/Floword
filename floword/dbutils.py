@@ -411,6 +411,8 @@ async def get_db_session(
         except exc.SQLAlchemyError:
             await session.rollback()
             raise
+        finally:
+            await session.close()
 
 
 @asynccontextmanager
@@ -446,3 +448,5 @@ async def open_db_session(
         except exc.SQLAlchemyError:
             await session.rollback()
             raise
+        finally:
+            await session.close()

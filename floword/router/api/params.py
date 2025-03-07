@@ -51,6 +51,7 @@ class RedactableCompletion(BaseModel):
 class ChatRequest(RedactableCompletion):
     system_prompt: str | None = ""  # Only avaliable when starting a new conversation
     prompt: str
+    auto_permit: bool = False
 
 
 class RetryRequest(RedactableCompletion):

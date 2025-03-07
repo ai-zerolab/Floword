@@ -7,7 +7,6 @@ import uvicorn
 from floword.app import app
 from floword.config import get_config
 from floword.dbutils import init_and_migrate, remove_all_data
-from floword.ui.app import main as ui_app
 
 
 def coro(f):
@@ -28,6 +27,8 @@ def ui():
     """
     Start the UI.
     """
+    from floword.ui.app import main as ui_app
+
     ui_app()
 
 

@@ -107,7 +107,6 @@ async def run(
 
     Then each data part is ModelResponseStreamEvent. Client need to handle it.
     """
-
     return EventSourceResponse(
         conversation_controller.permit_call_tool(user, conversation_id, params),
         ping=True,

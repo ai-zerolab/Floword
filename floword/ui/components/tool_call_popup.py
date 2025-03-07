@@ -1,157 +1,112 @@
 """Tool call popup component for the Floword UI."""
 
-from collections.abc import AsyncIterable
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Callable
 
 import gradio as gr
 
-from floword.ui.api_client import FlowordAPIClient
-from floword.ui.message_processor import MessageProcessor
+from floword.ui.models.conversation import ConversationState, ToolCall, ToolCallStatus
+from floword.log import logger
 
 
-# Global state
-message_processor = MessageProcessor()
+class ToolCallPopup:
+    """Tool call popup component."""
+
+    def __init__(self, conversation_state: Optional[ConversationState] = None):
+        """Initialize the tool call popup.
+
+        Args:
+            conversation_state: Optional conversation state to use.
+        """
+        self.conversation_state = conversation_state or ConversationState()
+
+    def create_popup(self) -> Tuple[gr.Group, gr.Dataframe, gr.Button, gr.Button, gr.Button]:
+        """Create the tool call popup component.
+
+        Returns:
+            A tuple of (popup, tool_calls_list, permit_btn, permit_all_btn, cancel_btn).
+        """
+        with gr.Group(visible=False) as tool_call_popup:
+            gr.Markdown("### Tool Calls")
+
+            tool_calls_list = gr.Dataframe(
+                headers=["ID", "Tool Name", "Arguments", "Selected"],
+                datatype=["str", "str", "str", "bool"],
+                row_count=5,
+                col_count=(4, "fixed"),
+                interactive=True,
+            )
+
+            with gr.Row():
+                permit_btn = gr.Button("Permit Selected", variant="primary")
+                permit_all_btn = gr.Button("Permit All", variant="secondary")
+                cancel_btn = gr.Button("Cancel")
+
+        return tool_call_popup, tool_calls_list, permit_btn, permit_all_btn, cancel_btn
+
+    def prepare_tool_calls(self) -> Tuple[List[List[Any]], List[str]]:
+        """Prepare tool calls for display.
+
+        Returns:
+            A tuple of (tool_calls_list, tool_call_ids).
+        """
+        if not self.conversation_state.pending_tool_calls:
+            return [], []
+
+        # Prepare the tool calls for display
+        tool_calls_list = []
+        tool_call_ids = []
+        for tc in self.conversation_state.pending_tool_calls:
+            tool_calls_list.append([
+                tc.tool_call_id,
+                tc.tool_name,
+                tc.args,
+                tc.selected,  # Selected by default
+            ])
+            tool_call_ids.append(tc.tool_call_id)
+
+        return tool_calls_list, tool_call_ids
+
+    def get_selected_tool_calls(self, df: List[List[Any]]) -> List[str]:
+        """Get selected tool call IDs from the dataframe.
+
+        Args:
+            df: The dataframe.
+
+        Returns:
+            The selected tool call IDs.
+        """
+        selected_ids = []
+        for row in df:
+            if len(row) >= 4 and row[3]:  # If selected
+                selected_ids.append(row[0])  # Add the ID
+        return selected_ids
+
+    def update_tool_call_selection(self, df: List[List[Any]]) -> None:
+        """Update the tool call selection in the conversation state.
+
+        Args:
+            df: The dataframe.
+        """
+        # Create a mapping of tool call IDs to selection status
+        selection_map = {row[0]: row[3] for row in df if len(row) >= 4}
+
+        # Update the selection status in the conversation state
+        for tc in self.conversation_state.pending_tool_calls:
+            if tc.tool_call_id in selection_map:
+                tc.selected = selection_map[tc.tool_call_id]
 
 
-async def permit_tool_call(
-    history: List[Dict[str, Any]],
-    conversation_id: str,
-    selected_tool_calls: List[str],
-    always_permit: bool,
-    url: str,
-    token: Optional[str] = None,
-) -> AsyncIterable[List[Dict[str, Any]]]:
-    """Permit tool calls.
-
-    Args:
-        history: The conversation history.
-        conversation_id: The ID of the conversation.
-        selected_tool_calls: The IDs of the selected tool calls to permit.
-        always_permit: Whether to always permit tool calls.
-        url: The URL of the backend.
-        token: Optional API token.
-
-    Returns:
-        The updated conversation history.
-    """
-    if not conversation_id:
-        raise gr.Error("No conversation selected. Please create a new conversation first.")
-
-    # Clear the message processor
-    message_processor.clear()
-
-    # Create the API client
-    client = FlowordAPIClient(url, token)
-
-    try:
-        # Stream the response
-        async for event in client.permit_tool_call(
-            conversation_id,
-            execute_all=always_permit,
-            tool_call_ids=selected_tool_calls if not always_permit else None,
-        ):
-            # Process the event
-            message_update, tool_calls = message_processor.process_event(event)
-
-            # If we have tool calls, we need to permit them again
-            if tool_calls:
-                # This shouldn't happen, but just in case
-                continue
-
-            # If we have a message update, add it to the history
-            if message_update:
-                # Check if we already have an assistant message
-                if history and history[-1]["role"] == "assistant":
-                    # Update the existing message
-                    history[-1] = message_update
-                else:
-                    # Add a new message
-                    history.append(message_update)
-
-                # Yield the updated history
-                yield history
-
-        # Get the final message
-        final_message = message_processor.get_current_message()
-        if final_message:
-            # Check if we already have an assistant message
-            if history and history[-1]["role"] == "assistant":
-                # Update the existing message
-                history[-1] = final_message
-            else:
-                # Add a new message
-                history.append(final_message)
-
-        await client.close()
-        yield history
-    except Exception as e:
-        await client.close()
-        raise gr.Error(f"Failed to permit tool call: {str(e)}")
+# Create a global tool call popup for use in the UI
+tool_call_popup = ToolCallPopup()
 
 
-# Wrapper function to handle async permit_tool_call
-async def permit_tool_call_wrapper(
-    history: List[Dict[str, Any]],
-    conversation_id: str,
-    selected_tool_calls: List[str],
-    always_permit: bool,
-    url: str,
-    token: Optional[str] = None,
-) -> List[Dict[str, Any]]:
-    """Wrapper for permit_tool_call to handle async generator.
-
-    Args:
-        history: The conversation history.
-        conversation_id: The ID of the conversation.
-        selected_tool_calls: The IDs of the selected tool calls to permit.
-        always_permit: Whether to always permit tool calls.
-        url: The URL of the backend.
-        token: Optional API token.
-
-    Returns:
-        The updated conversation history.
-    """
-    # Create a copy of the history to avoid modifying the original
-    history_copy = list(history)
-
-    # Consume the generator
-    async for updated_history in permit_tool_call(
-        history_copy,
-        conversation_id,
-        selected_tool_calls,
-        always_permit,
-        url,
-        token,
-    ):
-        history_copy = updated_history
-
-    return history_copy
-
-
-def create_tool_call_popup() -> Tuple[gr.Group, gr.Dataframe, gr.Checkbox, gr.Button, gr.Button, gr.Button]:
+def create_tool_call_popup() -> Tuple[gr.Group, gr.Dataframe, gr.Button, gr.Button, gr.Button]:
     """Create the tool call popup component.
 
     Returns:
-        A tuple of (popup, tool_calls_list, always_permit, permit_btn, permit_all_btn, cancel_btn).
+        A tuple of (popup, tool_calls_list, permit_btn, permit_all_btn, cancel_btn).
     """
-    with gr.Group(visible=False) as tool_call_popup:
-        gr.Markdown("### Tool Calls")
-
-        tool_calls_list = gr.Dataframe(
-            headers=["ID", "Tool Name", "Arguments", "Selected"],
-            datatype=["str", "str", "str", "bool"],
-            row_count=5,
-            col_count=(4, "fixed"),
-            interactive=True,
-        )
-
-        with gr.Row():
-            always_permit = gr.Checkbox(label="Always permit tool calls", value=False)
-            permit_btn = gr.Button("Permit Selected", variant="primary")
-            permit_all_btn = gr.Button("Permit All", variant="secondary")
-            cancel_btn = gr.Button("Cancel")
-
-    return tool_call_popup, tool_calls_list, always_permit, permit_btn, permit_all_btn, cancel_btn
+    return tool_call_popup.create_popup()
 
 
 def prepare_tool_calls(tool_calls_data: Optional[List[Dict[str, Any]]]) -> Tuple[List[List[Any]], List[str]]:
@@ -166,32 +121,41 @@ def prepare_tool_calls(tool_calls_data: Optional[List[Dict[str, Any]]]) -> Tuple
     if not tool_calls_data:
         return [], []
 
+    # Update the conversation state with the tool calls
+    tool_call_popup.conversation_state.clear_pending_tool_calls()
+    for tc_data in tool_calls_data:
+        tool_call = ToolCall(
+            tool_name=tc_data["tool_name"],
+            args=tc_data["args"],
+            tool_call_id=tc_data["tool_call_id"],
+            status=ToolCallStatus.PENDING,
+            selected=True,
+        )
+        tool_call_popup.conversation_state.add_tool_call(tool_call)
+
     # Prepare the tool calls for display
-    tool_calls_list = []
-    tool_call_ids = []
-    for tc in tool_calls_data:
-        tool_calls_list.append([
-            tc["tool_call_id"],
-            tc["tool_name"],
-            tc["args"],
-            True,  # Selected by default
-        ])
-        tool_call_ids.append(tc["tool_call_id"])
-
-    return tool_calls_list, tool_call_ids
+    return tool_call_popup.prepare_tool_calls()
 
 
-def get_selected_tool_calls(df: List[List[Any]]) -> List[str]:
+def get_selected_tool_calls(df: List[List[Any]], tool_calls_state: List[Dict[str, Any]]) -> List[str]:
     """Get selected tool call IDs from the dataframe.
 
     Args:
         df: The dataframe.
+        tool_calls_state: The tool calls state.
 
     Returns:
         The selected tool call IDs.
     """
     selected_ids = []
+
+    # First try to get selected IDs from the dataframe
     for row in df:
         if len(row) >= 4 and row[3]:  # If selected
             selected_ids.append(row[0])  # Add the ID
+
+    # If that didn't work, try to get them from the tool calls state
+    if not selected_ids and tool_calls_state:
+        selected_ids = [tc["tool_call_id"] for tc in tool_calls_state if tc.get("selected", True)]
+
     return selected_ids

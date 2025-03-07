@@ -13,6 +13,7 @@ from pydantic_ai.messages import (
     ModelRequestPart,
     ModelResponsePart,
     ModelResponseStreamEvent,
+    ToolCallPart,
 )
 from pydantic_ai.models import Model
 from pydantic_ai.usage import Usage
@@ -24,6 +25,7 @@ from floword.config import Config, get_config
 from floword.dbutils import get_db_session
 from floword.llms.mcp_agent import ConversationError, MCPAgent
 from floword.llms.models import ModelInitParams, get_default_model, init_model
+from floword.log import logger
 from floword.mcp.manager import MCPManager, get_mcp_manager
 from floword.orm import Conversation
 from floword.router.api.params import (
@@ -260,8 +262,23 @@ class ConversationController:
             usage=Usage(**(conversation.usage or {})),
         )
         try:
-            async for part in agent.chat_stream(params.prompt, model_settings=params.llm_model_settings):
-                yield {"data": dataclass_to_dict(part)}
+            async for part in agent.chat_stream(
+                params.prompt,
+                model_settings=params.llm_model_settings,
+            ):
+                yield {"data": json.dumps(dataclass_to_dict(part))}
+                await self._update_conversation(conversation_id, agent.all_messages(), agent.usage())
+            index_bias = 0
+            while params.auto_permit and any(isinstance(p, ToolCallPart) for p in agent.last_response().parts):
+                logger.info("Auto-permiting tool calls...")
+                async for part in agent.run_tool_stream(
+                    model_settings=params.llm_model_settings,
+                    execute_all_tool_calls=True,
+                ):
+                    if not isinstance(part, ModelRequest):
+                        part.index += index_bias
+                    yield {"data": json.dumps(dataclass_to_dict(part))}
+                await self._update_conversation(conversation_id, agent.all_messages(), agent.usage())
         except ConversationError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
@@ -288,14 +305,18 @@ class ConversationController:
 
         try:
             async for part in agent.retry_stream(model_settings=params.llm_model_settings):
-                yield {"data": dataclass_to_dict(part)}
+                yield {"data": json.dumps(dataclass_to_dict(part))}
         except ConversationError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
         await self._update_conversation(conversation_id, agent.all_messages(), agent.usage())
 
     async def permit_call_tool(
-        self, user: User, conversation_id: str, params: PermitCallToolRequest
+        self,
+        user: User,
+        conversation_id: str,
+        params: PermitCallToolRequest,
+        agent: MCPAgent | None = None,
     ) -> AsyncIterator[ModelResponseStreamEvent | ModelRequest]:
         result = await self.session.execute(select(Conversation).where(Conversation.conversation_id == conversation_id))
         conversation = result.scalars().one_or_none()
@@ -305,7 +326,7 @@ class ConversationController:
         if conversation.user_id != user.user_id:
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
 
-        agent = MCPAgent(
+        agent = agent or MCPAgent(
             model=self.get_model(params),
             mcp_manager=self.mcp_manager,
             system_prompt=self.default_system_prompt,
@@ -320,7 +341,7 @@ class ConversationController:
                 execute_tool_call_ids=params.execute_tool_call_ids,
                 execute_tool_call_part=params.execute_tool_call_part,
             ):
-                yield {"data": dataclass_to_dict(part)}
+                yield {"data": json.dumps(dataclass_to_dict(part))}
         except ConversationError as e:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
         await self._update_conversation(conversation_id, agent.all_messages(), agent.usage())
