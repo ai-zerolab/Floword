@@ -1,3 +1,4 @@
+import json
 from typing import Any
 
 from fastapi import Depends
@@ -232,7 +233,7 @@ def get_default_model(config: Config = Depends(get_config)) -> Model | None:
         ModelInitParams(
             provider=config.default_model_provider,
             model_name=config.default_model_name,
-            model_kwargs=config.default_model_kwargs or {},
+            model_kwargs=json.loads(config.default_model_kwargs or "{}"),
         )
     )
 

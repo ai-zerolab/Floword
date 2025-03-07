@@ -148,7 +148,7 @@ class ConversationController:
                 ModelInitParams(
                     provider=params.llm_config.provider or self.config.default_model_provider,
                     model_name=params.llm_config.model_name or self.config.default_model_name,
-                    model_kwargs=params.llm_config.model_kwargs or self.config.default_model_kwargs,
+                    model_kwargs=params.llm_config.model_kwargs or json.loads(self.config.default_model_kwargs or "{}"),
                 )
             )
             if params.llm_config
