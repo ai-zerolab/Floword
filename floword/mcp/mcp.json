@@ -7,7 +7,7 @@
       ],
       "command": "uvx",
       "env": {
-        "FIGMA_API_KEY": "your-figma-api-key"
+        "FIGMA_API_KEY": ""
       }
     }
   }

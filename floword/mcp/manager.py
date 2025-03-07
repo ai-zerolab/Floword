@@ -18,6 +18,9 @@ from floword.mcp.clinet import MCPClient, ServerParams
 if TYPE_CHECKING:
     from mcp.types import CallToolResult
 
+_HERE = Path(__file__).parent
+DEFAULT_MCP_CONFIG_PATH = _HERE / "mcp.json"
+
 
 def escape(server_name: str) -> str:
     # Convert server name to follow this pattern: [a-zA-Z0-9_]+
@@ -71,7 +74,10 @@ class MCPManager:
         logger.info(f"Loading MCP config from {config_path}")
         config_path = Path(config_path)
         if not config_path.exists() or not config_path.is_file():
-            raise ValueError(f"Invalid MCP config path: {config_path}")
+            logger.warning(
+                f"Does not exist or is not a file {config_path}. Using default MCP config path: {DEFAULT_MCP_CONFIG_PATH}"
+            )
+            config_path = DEFAULT_MCP_CONFIG_PATH
 
         mcp_configs = json.loads(config_path.read_text())
         self.disabled_clients = [
