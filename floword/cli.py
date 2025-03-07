@@ -7,6 +7,7 @@ import uvicorn
 from floword.app import app
 from floword.config import get_config
 from floword.dbutils import init_and_migrate, remove_all_data
+from floword.ui.app import main as ui_app
 
 
 def coro(f):
@@ -20,6 +21,14 @@ def coro(f):
 def _migrate():
     db_url = get_config().get_db_url(async_mode=False)
     init_and_migrate(db_url)
+
+
+@click.command()
+def ui():
+    """
+    Start the UI.
+    """
+    ui_app()
 
 
 @click.command()
@@ -67,4 +76,5 @@ def cli():
 
 cli.add_command(migrate)
 cli.add_command(start)
+cli.add_command(ui)
 # cli.add_command(clear) # noqa: not visible in CLI
