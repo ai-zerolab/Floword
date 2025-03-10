@@ -362,17 +362,15 @@ class ChatInterface:
 chat_interface = ChatInterface()
 
 
-def create_chat_interface() -> (
-    Tuple[
-        gr.Chatbot,
-        gr.Textbox,
-        gr.Button,
-        gr.Dropdown,
-        gr.Dropdown,
-        gr.Slider,
-        gr.Number,
-    ]
-):
+def create_chat_interface() -> Tuple[
+    gr.Chatbot,
+    gr.Textbox,
+    gr.Button,
+    gr.Dropdown,
+    gr.Dropdown,
+    gr.Slider,
+    gr.Number,
+]:
     """Create the chat interface component.
 
     Returns:
