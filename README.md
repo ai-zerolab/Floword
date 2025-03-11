@@ -51,6 +51,10 @@ Available options:
 - `FLOWORD_PG_PORT`: PostgreSQL port. Default: `5432`
 - `FLOWORD_PG_DATABASE`: PostgreSQL database name. Default: `floword`
 
+#### Streamer Configuration
+
+- `FLOWORD_REDIS_URL`: Redis URL for streaming messages in distributed mode. Default: `None`
+
 #### Model Configuration
 
 - `FLOWORD_DEFAULT_MODEL_PROVIDER`: Default LLM provider. Default: `openai`
