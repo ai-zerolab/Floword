@@ -91,7 +91,7 @@ async def get_conversation_info(
     streamer = PersistentStreamer.get_instance()
     stream_id = get_conversation_stream_id(conversation_id, user.user_id)
     info = await conversation_controller.get_conversation_info(user, conversation_id)
-    return ConversionInfoResponse.from_info(info, streamer.has_stream(stream_id))
+    return ConversionInfoResponse.from_info(info, await streamer.has_stream(stream_id))
 
 
 def get_conversation_stream_id(conversation_id: str, user_id: str) -> str:
@@ -114,22 +114,25 @@ async def chat(
     streamer = PersistentStreamer.get_instance()
     stream_id = get_conversation_stream_id(conversation_id, user.user_id)
 
-    if streamer.has_stream(stream_id):
+    if await streamer.has_stream(stream_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A stream is already in progress for this conversation",
         )
 
     # Create a new stream and start processing in the background
-    stream_data = streamer.create_stream(stream_id)
+    stream_data = await streamer.create_stream(stream_id)
     # Start background task to process the stream
     asyncio.create_task(process_stream(conversation_controller.chat(user, conversation_id, params), stream_data))  # noqa: RUF006
 
-    return PersistentEventSourceResponse(
+    # Create and initialize the response
+    response = PersistentEventSourceResponse(
         streamer=streamer,
         stream_id=stream_id,
         ping=True,
     )
+    await response.async_init()
+    return response
 
 
 @router.post("/permit-call-tool/{conversation_id}")
@@ -147,14 +150,14 @@ async def run(
     streamer = PersistentStreamer.get_instance()
     stream_id = get_conversation_stream_id(conversation_id, user.user_id)
 
-    if streamer.has_stream(stream_id):
+    if await streamer.has_stream(stream_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A stream is already in progress for this conversation",
         )
 
     # Create a new stream and start processing in the background
-    stream_data = streamer.create_stream(stream_id)
+    stream_data = await streamer.create_stream(stream_id)
     # Start background task to process the stream
     asyncio.create_task(  # noqa: RUF006
         process_stream(
@@ -163,11 +166,14 @@ async def run(
         )
     )
 
-    return PersistentEventSourceResponse(
+    # Create and initialize the response
+    response = PersistentEventSourceResponse(
         streamer=streamer,
         stream_id=stream_id,
         ping=True,
     )
+    await response.async_init()
+    return response
 
 
 @router.post("/retry/{conversation_id}")
@@ -180,14 +186,14 @@ async def retry_conversation(
     streamer = PersistentStreamer.get_instance()
     stream_id = get_conversation_stream_id(conversation_id, user.user_id)
 
-    if streamer.has_stream(stream_id):
+    if await streamer.has_stream(stream_id):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail="A stream is already in progress for this conversation",
         )
 
     # Create a new stream and start processing in the background
-    stream_data = streamer.create_stream(stream_id)
+    stream_data = await streamer.create_stream(stream_id)
     # Start background task to process the stream
     asyncio.create_task(  # noqa: RUF006
         process_stream(
@@ -196,11 +202,14 @@ async def retry_conversation(
         )
     )
 
-    return PersistentEventSourceResponse(
+    # Create and initialize the response
+    response = PersistentEventSourceResponse(
         streamer=streamer,
         stream_id=stream_id,
         ping=True,
     )
+    await response.async_init()
+    return response
 
 
 @router.post("/resume/{conversation_id}")
@@ -215,19 +224,21 @@ async def resume_stream(
     streamer = PersistentStreamer.get_instance()
     stream_id = get_conversation_stream_id(conversation_id, user.user_id)
 
-    if not streamer.has_stream(stream_id):
+    if not await streamer.has_stream(stream_id):
         # If the stream doesn't exist, return an empty response
         # This could happen if the stream was completed and deleted
         # or if the stream was never created
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
-    # Return a response that will stream all events from the beginning
-    return PersistentEventSourceResponse(
+    # Create and initialize the response
+    response = PersistentEventSourceResponse(
         streamer=streamer,
         stream_id=stream_id,
         start_index=0,  # Start from the beginning
         ping=True,
     )
+    await response.async_init()
+    return response
 
 
 @router.post("/delete/{conversation_id}")

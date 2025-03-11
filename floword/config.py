@@ -31,6 +31,7 @@ class Config(BaseSettings):
     pg_host: str | None = "localhost"
     pg_port: int | None = 5432
     pg_database: str | None = "floword"
+    redis_url: str | None = None
 
     default_model_provider: str | None = "openai"
     default_model_name: str | None = None

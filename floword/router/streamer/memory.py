@@ -5,10 +5,7 @@ from collections import deque
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager, suppress
 from datetime import datetime
-from typing import Any, Generic, TypeVar
-
-from sse_starlette.sse import EventSourceResponse
-from starlette.types import Receive, Scope, Send
+from typing import Generic, TypeVar
 
 from floword.log import logger
 
@@ -26,21 +23,17 @@ class StreamData(Generic[T]):
         self.created_at: datetime = datetime.now()
         self._event_added = asyncio.Event()
 
-    def add_event(self, event: T) -> None:
+    async def add_event(self, event: T) -> None:
         """Add an event to the stream."""
         self.events.append(event)
         self._event_added.set()
         self._event_added = asyncio.Event()
 
-    def get_events(self) -> list[T]:
-        """Get all events in the stream."""
-        return list(self.events)
-
-    def is_completed(self) -> bool:
+    async def is_completed(self) -> bool:
         """Check if the stream is completed."""
         return self.completed
 
-    def mark_completed(self) -> None:
+    async def mark_completed(self) -> None:
         """Mark the stream as completed."""
         self.completed = True
         self._event_added.set()  # Wake up any waiting consumers
@@ -83,7 +76,7 @@ class PersistentStreamer:
     def __init__(self):
         self.streams: dict[str, StreamData] = {}
 
-    def create_stream(self, stream_id: str) -> StreamData:
+    async def create_stream(self, stream_id: str) -> StreamData:
         """Create a new stream with the given ID."""
         if stream_id in self.streams:
             raise ValueError(f"Stream with ID {stream_id} already exists")
@@ -91,86 +84,29 @@ class PersistentStreamer:
         self.streams[stream_id] = StreamData()
         return self.streams[stream_id]
 
-    def get_stream(self, stream_id: str) -> StreamData:
+    async def get_stream(self, stream_id: str) -> StreamData:
         """Get a stream by ID."""
         if stream_id not in self.streams:
             raise ValueError(f"Stream with ID {stream_id} not found")
 
         return self.streams[stream_id]
 
-    def delete_stream(self, stream_id: str) -> None:
+    async def get_streams(self) -> dict[str, StreamData]:
+        """Get all streams."""
+        return self.streams
+
+    async def delete_stream(self, stream_id: str) -> None:
         """Delete a stream by ID."""
         if stream_id in self.streams:
             del self.streams[stream_id]
 
-    def has_stream(self, stream_id: str) -> bool:
+    async def has_stream(self, stream_id: str) -> bool:
         """Check if a stream with the given ID exists."""
         return stream_id in self.streams
 
-
-class PersistentEventSourceResponse(EventSourceResponse):
-    """
-    An EventSourceResponse that uses a persistent stream.
-    """
-
-    _cleanup_task = None
-
-    def __init__(
-        self,
-        streamer: PersistentStreamer,
-        stream_id: str,
-        start_index: int = 0,
-        status_code: int = 200,
-        ping: bool = False,
-        ping_message_factory=None,
-        **kwargs,
-    ):
-        self.streamer = streamer
-        self.stream_id = stream_id
-        self.start_index = start_index
-
-        try:
-            stream_data = streamer.get_stream(stream_id)
-        except ValueError:
-            stream_data = streamer.create_stream(stream_id)
-
-        # Create an async generator that yields events from the stream
-        async def event_generator():
-            try:
-                async for event in stream_data.stream_events(start_index):
-                    yield event
-            except Exception as e:
-                logger.exception(f"Error streaming events for {stream_id}: {e}")
-
-        super().__init__(
-            content=event_generator(),
-            status_code=status_code,
-            ping=ping,
-            ping_message_factory=ping_message_factory,
-            **kwargs,
-        )
-
-    async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
-        """
-        Override the __call__ method to handle client disconnects.
-        """
-        # Start a background task to process the stream
-        try:
-            await super().__call__(scope, receive, send)
-        except Exception as e:
-            logger.exception(f"Error in PersistentEventSourceResponse: {e}")
-        finally:
-            # If the stream is completed, we can delete it
-            try:
-                stream_data = self.streamer.get_stream(self.stream_id)
-                if stream_data.is_completed():
-                    self.streamer.delete_stream(self.stream_id)
-            except ValueError:
-                pass  # Stream was already deleted
-
     @classmethod
     @asynccontextmanager
-    async def auto_cleanup(cls, cleanup_interval: int = 60):
+    async def auto_cleanup(cls, cleanup_interval: int = 1):
         """
         Start a background task that periodically cleans up completed streams.
 
@@ -196,11 +132,11 @@ class PersistentEventSourceResponse(EventSourceResponse):
                         break
 
                     # Clean up completed streams
-                    streamer = PersistentStreamer.get_instance()
-                    for stream_id, stream_data in list(streamer.streams.items()):
-                        if stream_data.is_completed():
+                    streamer = cls.get_instance()
+                    for stream_id, stream_data in list((await streamer.get_streams()).items()):
+                        if await stream_data.is_completed():
                             logger.info(f"Cleaning up completed stream: {stream_id}")
-                            streamer.delete_stream(stream_id)
+                            await streamer.delete_stream(stream_id)
             except Exception as e:
                 logger.exception(f"Error in stream cleanup task: {e}")
 
@@ -219,17 +155,3 @@ class PersistentEventSourceResponse(EventSourceResponse):
                     await asyncio.wait_for(cls._cleanup_task, timeout=5.0)
                 except asyncio.TimeoutError:
                     logger.warning("Stream cleanup task did not complete in time")
-
-
-async def process_stream(source_iterator: AsyncIterator[Any], stream_data: StreamData) -> None:
-    """
-    Process a source iterator and add events to a stream.
-    This function should be called as a background task.
-    """
-    try:
-        async for event in source_iterator:
-            stream_data.add_event(event)
-    except Exception as e:
-        logger.exception(f"Error processing stream: {e}")
-    finally:
-        stream_data.mark_completed()

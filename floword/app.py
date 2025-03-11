@@ -7,7 +7,7 @@ from floword.dbutils import init_engine
 from floword.log import logger
 from floword.mcp.manager import init_mcp_manager
 from floword.router.api import routers
-from floword.router.streamer import PersistentEventSourceResponse
+from floword.router.streamer import PersistentStreamer
 
 
 @asynccontextmanager
@@ -15,7 +15,7 @@ async def lifespan(app: FastAPI):
     config = get_config()
     logger.info(f"Current default model: {config.default_model_provider}:{config.default_model_name}")
 
-    async with init_engine(config), init_mcp_manager(config), PersistentEventSourceResponse.auto_cleanup():
+    async with init_engine(config), init_mcp_manager(config), PersistentStreamer.auto_cleanup():
         yield
 
 
