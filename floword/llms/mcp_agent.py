@@ -82,12 +82,21 @@ class MCPAgent:
 
     async def _execute_one_tool_call_part(self, tool_call_part: ToolCallPart) -> ToolReturnPart:
         server_name, tool_name = self._dispatch_tool_definition_name(tool_call_part.tool_name)
-        call_tool_result = await self.mcp_manager.call_tool(server_name, tool_name, tool_call_part.args)
-        return ToolReturnPart(
-            tool_name=tool_call_part.tool_name,
-            content=call_tool_result.model_dump(),
-            tool_call_id=tool_call_part.tool_call_id,
-        )
+        try:
+            call_tool_result = await self.mcp_manager.call_tool(server_name, tool_name, tool_call_part.args)
+        except Exception as e:
+            logger.exception(e)
+            return ToolReturnPart(
+                tool_name=tool_call_part.tool_name,
+                content={"error": str(e)},
+                tool_call_id=tool_call_part.tool_call_id,
+            )
+        else:
+            return ToolReturnPart(
+                tool_name=tool_call_part.tool_name,
+                content=call_tool_result.model_dump(),
+                tool_call_id=tool_call_part.tool_call_id,
+            )
 
     async def _execute_all_tool_calls(self, message: ModelMessage) -> list[ToolReturnPart]:
         if not isinstance(message, ModelResponse):

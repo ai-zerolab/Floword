@@ -32,8 +32,10 @@ dependencies = [
     "pydantic-ai-bedrock>=0.2.2",
     "pydantic-settings[toml]>=2.8.0",
     "python-jose[cryptography]>=3.4.0",
+    "redis>=5.2.1",
     "sqlalchemy[asyncio]>=2.0.38",
     "sse-starlette>=2.2.1",
+    "starlette>=0.46.0",
     "uvicorn[standard]>=0.34.0",
 ]
 
@@ -124,10 +126,11 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*" = ["S101", "E722", "F841", "B017", "S105", "S106"]
+"tests/*" = ["S101", "E722", "F841", "B017", "S105", "S106", "S110"]
 "floword/dbutils.py" = ["S603", "S607"]
 "floword/ui/**/*.py" = ["ALL"]  # Ignore all rules for UI files
 "dev/*" = ["S311"]
+"floword/config.py" = ["S105"]
 
 [tool.ruff.format]
 preview = true
