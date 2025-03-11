@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from collections.abc import AsyncIterator
 from typing import Any
 
@@ -29,6 +31,7 @@ async def process_stream(source_iterator: AsyncIterator[Any], stream_data: Strea
         logger.exception(f"Error processing stream: {e}")
     finally:
         await stream_data.mark_completed()
+        logger.info(f"Stream {stream_data.stream_id} completed")
 
 
 class PersistentEventSourceResponse(EventSourceResponse):
@@ -42,6 +45,7 @@ class PersistentEventSourceResponse(EventSourceResponse):
         self,
         streamer: PersistentStreamer,
         stream_id: str,
+        stream_data: StreamData,
         start_index: int = 0,
         status_code: int = 200,
         ping: bool = False,
@@ -50,37 +54,13 @@ class PersistentEventSourceResponse(EventSourceResponse):
     ):
         self.streamer = streamer
         self.stream_id = stream_id
+        self.stream_data = stream_data
         self.start_index = start_index
         self.status_code = status_code
         self.ping = ping
         self.ping_message_factory = ping_message_factory
         self.kwargs = kwargs
-        self.stream_data = None
 
-        # Initialize with a placeholder generator
-        # This will be replaced in async_init
-        async def placeholder_generator():
-            yield {"message": "Initializing..."}
-
-        super().__init__(
-            content=placeholder_generator(),
-            status_code=status_code,
-            ping=ping,
-            ping_message_factory=ping_message_factory,
-            **kwargs,
-        )
-
-    async def async_init(self):
-        """
-        Asynchronously initialize the response.
-        This method must be called after creating the instance.
-        """
-        try:
-            self.stream_data = await self.streamer.get_stream(self.stream_id)
-        except ValueError:
-            self.stream_data = await self.streamer.create_stream(self.stream_id)
-
-        # Create an async generator that yields events from the stream
         async def event_generator():
             try:
                 async for event in self.stream_data.stream_events(self.start_index):
@@ -88,10 +68,13 @@ class PersistentEventSourceResponse(EventSourceResponse):
             except Exception as e:
                 logger.exception(f"Error streaming events for {self.stream_id}: {e}")
 
-        # Replace the content with the real generator
-        self.body_iterator = event_generator()
-
-        return self
+        super().__init__(
+            content=event_generator(),
+            status_code=status_code,
+            ping=ping,
+            ping_message_factory=ping_message_factory,
+            **kwargs,
+        )
 
     async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
         """
@@ -107,6 +90,7 @@ class PersistentEventSourceResponse(EventSourceResponse):
             try:
                 stream_data = await self.streamer.get_stream(self.stream_id)
                 if await stream_data.is_completed():
+                    logger.info(f"Cleaning up completed stream: {self.stream_id}")
                     await self.streamer.delete_stream(self.stream_id)
             except ValueError:
                 pass  # Stream was already deleted

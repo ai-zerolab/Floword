@@ -22,7 +22,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from floword.config import Config, get_config
-from floword.dbutils import get_db_session
+from floword.dbutils import get_db_session, open_db_session
 from floword.llms.mcp_agent import ConversationError, MCPAgent
 from floword.llms.models import ModelInitParams, get_default_model, init_model
 from floword.log import logger
@@ -236,12 +236,15 @@ class ConversationController:
         # Convert dataclasses to dictionaries
         messages_dict = [dataclass_to_dict(message) for message in messages]
         usage_dict = dataclass_to_dict(usage)
-        await self.session.execute(
-            update(Conversation)
-            .where(Conversation.conversation_id == conversation_id)
-            .values(messages=messages_dict, usage=usage_dict)
-        )
-        await self.session.commit()
+
+        # Use a new session for this update to avoid transaction state conflicts during streaming
+        async with open_db_session(self.config) as session:
+            await session.execute(
+                update(Conversation)
+                .where(Conversation.conversation_id == conversation_id)
+                .values(messages=messages_dict, usage=usage_dict)
+            )
+            # Session will be committed in the context manager
 
     async def chat(
         self, user: User, conversation_id: str, params: ChatRequest

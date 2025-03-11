@@ -68,6 +68,7 @@ def redis_port(docker_client: docker.DockerClient):
 def patch_env(monkeypatch, redis_port):
     redis_url = f"redis://localhost:{redis_port}"
     monkeypatch.setenv("FLOWORD_REDIS_URL", redis_url)
+    PersistentStreamer._instance = None
     return redis_url
 
 
@@ -255,6 +256,7 @@ async def test_auto_cleanup(redis_client):
 
     # Run cleanup directly to avoid timing issues
     await streamer.cleanup_completed_streams()
+    await asyncio.sleep(0.1)
 
     # Verify completed stream was deleted
     assert not await streamer.has_stream("cleanup-test-1")

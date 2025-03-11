@@ -129,9 +129,9 @@ async def chat(
     response = PersistentEventSourceResponse(
         streamer=streamer,
         stream_id=stream_id,
+        stream_data=stream_data,
         ping=True,
     )
-    await response.async_init()
     return response
 
 
@@ -170,9 +170,9 @@ async def run(
     response = PersistentEventSourceResponse(
         streamer=streamer,
         stream_id=stream_id,
+        stream_data=stream_data,
         ping=True,
     )
-    await response.async_init()
     return response
 
 
@@ -206,9 +206,9 @@ async def retry_conversation(
     response = PersistentEventSourceResponse(
         streamer=streamer,
         stream_id=stream_id,
+        stream_data=stream_data,
         ping=True,
     )
-    await response.async_init()
     return response
 
 
@@ -230,14 +230,15 @@ async def resume_stream(
         # or if the stream was never created
         return Response(status_code=status.HTTP_204_NO_CONTENT)
 
+    stream_data = await streamer.get_stream(stream_id)
     # Create and initialize the response
     response = PersistentEventSourceResponse(
         streamer=streamer,
         stream_id=stream_id,
-        start_index=0,  # Start from the beginning
+        start_index=0,
+        stream_data=stream_data,
         ping=True,
     )
-    await response.async_init()
     return response
 
 

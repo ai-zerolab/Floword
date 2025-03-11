@@ -234,14 +234,27 @@ class PersistentStreamer:
 
         # Check if the metadata exists (more reliable than checking the stream key)
         exists = await self.redis_client.exists(meta_key)
+        logger.debug(f"Stream {stream_id} exists: {exists}")
 
         if exists:
+            # Check if the stream is completed
+            try:
+                stream_data = StreamData(stream_id, self.redis_client)
+                if await stream_data.is_completed():
+                    # If completed, remove it and return False
+                    logger.info(f"Stream {stream_id} is completed, removing it")
+                    await self.delete_stream(stream_id)
+                    return False
+            except Exception as e:
+                logger.exception(f"Error checking if stream {stream_id} is completed: {e}")
+
             # Make sure it's in the streams set
             await self.redis_client.sadd(self.streams_key, stream_id)
             return True
 
         # Check if it's in the streams set
         is_member = await self.redis_client.sismember(self.streams_key, stream_id)
+        logger.debug(f"Stream {stream_id} in streams set: {is_member}")
 
         if is_member and not exists:
             # Remove from streams set if metadata doesn't exist
