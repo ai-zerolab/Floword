@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections import deque
 from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager, suppress
 from datetime import datetime
 from typing import Any, Generic, TypeVar
 
@@ -112,6 +113,8 @@ class PersistentEventSourceResponse(EventSourceResponse):
     An EventSourceResponse that uses a persistent stream.
     """
 
+    _cleanup_task = None
+
     def __init__(
         self,
         streamer: PersistentStreamer,
@@ -164,6 +167,58 @@ class PersistentEventSourceResponse(EventSourceResponse):
                     self.streamer.delete_stream(self.stream_id)
             except ValueError:
                 pass  # Stream was already deleted
+
+    @classmethod
+    @asynccontextmanager
+    async def auto_cleanup(cls, cleanup_interval: int = 60):
+        """
+        Start a background task that periodically cleans up completed streams.
+
+        Args:
+            cleanup_interval: Time in seconds between cleanup runs
+
+        Returns:
+            An async context manager that cancels the cleanup task when exiting
+        """
+        # Create a cancellation event
+        cancel_event = asyncio.Event()
+
+        # Define the cleanup task
+        async def cleanup_task():
+            try:
+                while not cancel_event.is_set():
+                    # Wait for the specified interval or until cancelled
+                    with suppress(asyncio.TimeoutError):
+                        await asyncio.wait_for(cancel_event.wait(), timeout=cleanup_interval)
+
+                    # If cancelled, exit
+                    if cancel_event.is_set():
+                        break
+
+                    # Clean up completed streams
+                    streamer = PersistentStreamer.get_instance()
+                    for stream_id, stream_data in list(streamer.streams.items()):
+                        if stream_data.is_completed():
+                            logger.info(f"Cleaning up completed stream: {stream_id}")
+                            streamer.delete_stream(stream_id)
+            except Exception as e:
+                logger.exception(f"Error in stream cleanup task: {e}")
+
+        # Start the cleanup task
+        cls._cleanup_task = asyncio.create_task(cleanup_task())
+
+        try:
+            # Yield control back to the caller
+            yield
+        finally:
+            # Signal the task to stop
+            cancel_event.set()
+            # Wait for the task to complete
+            if cls._cleanup_task:
+                try:
+                    await asyncio.wait_for(cls._cleanup_task, timeout=5.0)
+                except asyncio.TimeoutError:
+                    logger.warning("Stream cleanup task did not complete in time")
 
 
 async def process_stream(source_iterator: AsyncIterator[Any], stream_data: StreamData) -> None:
