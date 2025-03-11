@@ -130,6 +130,7 @@ ignore = [
 "floword/dbutils.py" = ["S603", "S607"]
 "floword/ui/**/*.py" = ["ALL"]  # Ignore all rules for UI files
 "dev/*" = ["S311"]
+"floword/config.py" = ["S105"]
 
 [tool.ruff.format]
 preview = true
