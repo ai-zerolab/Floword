@@ -1,9 +1,11 @@
-from fastapi import APIRouter, Depends, Response, status
-from sse_starlette.sse import EventSourceResponse
+import asyncio
+
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from floword.router.api.params import (
     ChatRequest,
     ConversionInfo,
+    ConversionInfoResponse,
     NewConversation,
     PermitCallToolRequest,
     QueryConversations,
@@ -12,6 +14,11 @@ from floword.router.api.params import (
 from floword.router.controller.conversation import (
     ConversationController,
     get_conversation_controller,
+)
+from floword.router.streamer import (
+    PersistentEventSourceResponse,
+    PersistentStreamer,
+    process_stream,
 )
 from floword.users import User, get_current_user
 
@@ -72,8 +79,24 @@ async def get_conversation_info(
     conversation_id: str,
     user: User = Depends(get_current_user),
     conversation_controller: ConversationController = Depends(get_conversation_controller),
-) -> ConversionInfo:
-    return await conversation_controller.get_conversation_info(user, conversation_id)
+) -> ConversionInfoResponse:
+    """
+    If stream is in progress, return is_streaming=True
+    Client can use resume endpoint to continue the stream.
+
+    If resume endpoint response is empty, it means stream is completed,
+    client needs to refetch the info,
+    """
+
+    streamer = PersistentStreamer.get_instance()
+    stream_id = get_conversation_stream_id(conversation_id, user.user_id)
+    info = await conversation_controller.get_conversation_info(user, conversation_id)
+    return ConversionInfoResponse.from_info(info, streamer.has_stream(stream_id))
+
+
+def get_conversation_stream_id(conversation_id: str, user_id: str) -> str:
+    """Get a consistent stream ID for a conversation."""
+    return f"conversation_{conversation_id}_{user_id}"
 
 
 @router.post("/chat/{conversation_id}")
@@ -82,15 +105,29 @@ async def chat(
     params: ChatRequest,
     user: User = Depends(get_current_user),
     conversation_controller: ConversationController = Depends(get_conversation_controller),
-) -> EventSourceResponse:
+) -> PersistentEventSourceResponse:
     """
     SSE, first data part is ModelRequest for prompt.
 
     Then each data part is ModelResponseStreamEvent. Client need to handle it.
     """
+    streamer = PersistentStreamer.get_instance()
+    stream_id = get_conversation_stream_id(conversation_id, user.user_id)
 
-    return EventSourceResponse(
-        conversation_controller.chat(user, conversation_id, params),
+    if streamer.has_stream(stream_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A stream is already in progress for this conversation",
+        )
+
+    # Create a new stream and start processing in the background
+    stream_data = streamer.create_stream(stream_id)
+    # Start background task to process the stream
+    asyncio.create_task(process_stream(conversation_controller.chat(user, conversation_id, params), stream_data))  # noqa: RUF006
+
+    return PersistentEventSourceResponse(
+        streamer=streamer,
+        stream_id=stream_id,
         ping=True,
     )
 
@@ -101,14 +138,34 @@ async def run(
     params: PermitCallToolRequest,
     user: User = Depends(get_current_user),
     conversation_controller: ConversationController = Depends(get_conversation_controller),
-) -> EventSourceResponse:
+) -> PersistentEventSourceResponse:
     """
     SSE, first data part is ModelRequest for tool.
 
     Then each data part is ModelResponseStreamEvent. Client need to handle it.
     """
-    return EventSourceResponse(
-        conversation_controller.permit_call_tool(user, conversation_id, params),
+    streamer = PersistentStreamer.get_instance()
+    stream_id = get_conversation_stream_id(conversation_id, user.user_id)
+
+    if streamer.has_stream(stream_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A stream is already in progress for this conversation",
+        )
+
+    # Create a new stream and start processing in the background
+    stream_data = streamer.create_stream(stream_id)
+    # Start background task to process the stream
+    asyncio.create_task(  # noqa: RUF006
+        process_stream(
+            conversation_controller.permit_call_tool(user, conversation_id, params),
+            stream_data,
+        )
+    )
+
+    return PersistentEventSourceResponse(
+        streamer=streamer,
+        stream_id=stream_id,
         ping=True,
     )
 
@@ -119,9 +176,60 @@ async def retry_conversation(
     params: RetryRequest,
     user: User = Depends(get_current_user),
     conversation_controller: ConversationController = Depends(get_conversation_controller),
-) -> EventSourceResponse:
-    return EventSourceResponse(
-        conversation_controller.retry_conversation(user, conversation_id, params),
+) -> PersistentEventSourceResponse:
+    streamer = PersistentStreamer.get_instance()
+    stream_id = get_conversation_stream_id(conversation_id, user.user_id)
+
+    if streamer.has_stream(stream_id):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A stream is already in progress for this conversation",
+        )
+
+    # Create a new stream and start processing in the background
+    stream_data = streamer.create_stream(stream_id)
+    # Start background task to process the stream
+    asyncio.create_task(  # noqa: RUF006
+        process_stream(
+            conversation_controller.retry_conversation(user, conversation_id, params),
+            stream_data,
+        )
+    )
+
+    return PersistentEventSourceResponse(
+        streamer=streamer,
+        stream_id=stream_id,
+        ping=True,
+    )
+
+
+@router.post("/resume/{conversation_id}")
+async def resume_stream(
+    conversation_id: str,
+    user: User = Depends(get_current_user),
+) -> PersistentEventSourceResponse:
+    """
+    Resume a stream that was previously started.
+    This allows clients to reconnect and get all events that were streamed while they were disconnected.
+    """
+    streamer = PersistentStreamer.get_instance()
+    stream_id = get_conversation_stream_id(conversation_id, user.user_id)
+
+    if not streamer.has_stream(stream_id):
+        # If the stream doesn't exist, return an empty response
+        # This could happen if the stream was completed and deleted
+        # or if the stream was never created
+        return PersistentEventSourceResponse(
+            streamer=streamer,
+            stream_id=stream_id,
+            ping=True,
+        )
+
+    # Return a response that will stream all events from the beginning
+    return PersistentEventSourceResponse(
+        streamer=streamer,
+        stream_id=stream_id,
+        start_index=0,  # Start from the beginning
         ping=True,
     )
 

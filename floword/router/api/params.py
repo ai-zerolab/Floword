@@ -42,6 +42,22 @@ class ConversionInfo(BaseModel):
     updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
+class ConversionInfoResponse(ConversionInfo):
+    is_streaming: bool = False
+
+    @classmethod
+    def from_info(cls, info: ConversionInfo, is_streaming: bool) -> ConversionInfoResponse:
+        return cls(
+            conversation_id=info.conversation_id,
+            title=info.title,
+            messages=info.messages,
+            usage=info.usage,
+            created_at=info.created_at,
+            updated_at=info.updated_at,
+            is_streaming=is_streaming,
+        )
+
+
 class RedactableCompletion(BaseModel):
     llm_config: ModelInitParams | None = None
     llm_model_settings: dict | None = None
