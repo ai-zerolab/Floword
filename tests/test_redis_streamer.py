@@ -256,7 +256,6 @@ async def test_auto_cleanup(redis_client):
 
     # Run cleanup directly to avoid timing issues
     await streamer.cleanup_completed_streams()
-    await asyncio.sleep(0.1)
 
     # Verify completed stream was deleted
     assert not await streamer.has_stream("cleanup-test-1")

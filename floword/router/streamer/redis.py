@@ -20,7 +20,12 @@ class StreamData(Generic[T]):
     Stores stream data and provides methods to access it using Redis streams.
     """
 
-    def __init__(self, stream_id: str, redis_client: redis.Redis | None = None, metadata: dict | None = None):
+    def __init__(
+        self,
+        stream_id: str,
+        redis_client: redis.Redis | None = None,
+        metadata: dict | None = None,
+    ):
         """
         Initialize a new StreamData instance.
 
@@ -38,23 +43,20 @@ class StreamData(Generic[T]):
         self.meta_key = f"stream:{stream_id}:meta"
 
         # Initialize metadata if not provided
-        if metadata is None:
-            metadata = {}
+        if metadata:
+            now = datetime.now().isoformat()
+            default_metadata = {
+                "created_at": now,
+                "updated_at": now,
+                "completed": "0",
+                "completed_at": "",
+            }
 
-        # Set default metadata
-        now = datetime.now().isoformat()
-        default_metadata = {
-            "created_at": now,
-            "updated_at": now,
-            "completed": "0",
-            "completed_at": "",
-        }
+            # Merge default with provided metadata
+            merged_metadata = {**default_metadata, **metadata}
 
-        # Merge default with provided metadata
-        merged_metadata = {**default_metadata, **metadata}
-
-        # Store metadata in Redis
-        asyncio.create_task(self._set_metadata(merged_metadata))  # noqa: RUF006
+            # Store metadata in Redis
+            asyncio.create_task(self._set_metadata(merged_metadata))  # noqa: RUF006
 
     async def _set_metadata(self, metadata: dict) -> None:
         """Set metadata for the stream."""
