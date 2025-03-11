@@ -219,11 +219,7 @@ async def resume_stream(
         # If the stream doesn't exist, return an empty response
         # This could happen if the stream was completed and deleted
         # or if the stream was never created
-        return PersistentEventSourceResponse(
-            streamer=streamer,
-            stream_id=stream_id,
-            ping=True,
-        )
+        return Response(status_code=status.HTTP_204_NO_CONTENT)
 
     # Return a response that will stream all events from the beginning
     return PersistentEventSourceResponse(
