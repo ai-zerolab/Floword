@@ -25,6 +25,8 @@ class StreamData(Generic[T]):
         stream_id: str,
         redis_client: redis.Redis | None = None,
         metadata: dict | None = None,
+        *,
+        init_metadata: bool = False,
     ):
         """
         Initialize a new StreamData instance.
@@ -43,7 +45,8 @@ class StreamData(Generic[T]):
         self.meta_key = f"stream:{stream_id}:meta"
 
         # Initialize metadata if not provided
-        if metadata:
+        if init_metadata:
+            metadata = metadata or {}
             now = datetime.now().isoformat()
             default_metadata = {
                 "created_at": now,
@@ -199,7 +202,7 @@ class PersistentStreamer:
         await self.redis_client.sadd(self.streams_key, stream_id)
 
         # Create stream with metadata
-        stream_data = StreamData(stream_id, self.redis_client, metadata)
+        stream_data = StreamData(stream_id, self.redis_client, metadata, init_metadata=True)
         return stream_data
 
     async def get_stream(self, stream_id: str) -> StreamData:
