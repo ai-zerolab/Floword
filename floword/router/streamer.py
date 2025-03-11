@@ -19,7 +19,7 @@ class StreamData(Generic[T]):
     Stores stream data and provides methods to access it.
     """
 
-    def __init__(self, max_size: int = 1000):
+    def __init__(self, max_size: int = 1024 * 1024):
         self.events: deque[T] = deque(maxlen=max_size)
         self.completed: bool = False
         self.created_at: datetime = datetime.now()
