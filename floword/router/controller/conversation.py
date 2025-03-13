@@ -17,7 +17,6 @@ from pydantic_ai.messages import (
 )
 from pydantic_ai.models import Model
 from pydantic_ai.usage import Usage
-from pydantic_ai_bedrock.bedrock import ReasoningPart
 from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -91,7 +90,6 @@ def _to_parts(parts: list[dict | None]) -> list[ModelResponsePart | ModelRequest
     concrete_types = [
         *get_args(get_args(ModelRequestPart)[0]),
         *get_args(get_args(ModelResponsePart)[0]),
-        ReasoningPart,
     ]
     return [_to_one_part(part, concrete_types) for part in parts]
 

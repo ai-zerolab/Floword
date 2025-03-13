@@ -1,4 +1,5 @@
 import asyncio
+import json
 from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING
 
@@ -36,6 +37,10 @@ class AlreadyResponsedError(ConversationError):
 
 
 class NeedUserPromptError(ConversationError):
+    pass
+
+
+class InvalidResponseError(ConversationError):
     pass
 
 
@@ -215,8 +220,23 @@ class MCPAgent:
                     continue
                 yield message
             self._last_response = response.get()
+            self._validate_response(self._last_response)
             self._last_conversation = [*messages, self._last_response]
             self._usage.incr(response.usage(), requests=1)
+
+    def _validate_response(self, response: ModelResponse):
+        if not isinstance(response, ModelResponse):
+            raise InvalidResponseError(f"Invalid response: {response}")
+
+        if not response.parts:
+            return
+
+        for part in response.parts:
+            if isinstance(part, ToolCallPart) and isinstance(part.args, str):
+                try:
+                    json.loads(part.args)
+                except json.JSONDecodeError as e:
+                    raise InvalidResponseError(f"Invalid response: {response}") from e
 
     def all_messages(self) -> list[ModelMessage]:
         if self._last_conversation is None:
