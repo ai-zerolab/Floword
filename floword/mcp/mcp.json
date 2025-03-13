@@ -2,7 +2,7 @@
   "mcpServers": {
     "toolbox": {
       "args": [
-        "mcp-toolbox@latest",
+        "mcp-toolbox@0.1.0",
         "stdio"
       ],
       "command": "uvx",
