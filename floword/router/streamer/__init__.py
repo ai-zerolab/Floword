@@ -31,7 +31,7 @@ async def process_stream(source_iterator: AsyncIterator[Any], stream_data: Strea
         logger.exception(f"Error processing stream: {e}")
     finally:
         await stream_data.mark_completed()
-        logger.info(f"Stream {stream_data.stream_id} completed")
+        logger.info("Stream completed")
 
 
 class PersistentEventSourceResponse(EventSourceResponse):

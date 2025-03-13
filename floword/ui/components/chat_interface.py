@@ -91,7 +91,7 @@ class ChatInterface:
                     label="Temperature",
                 )
                 max_tokens = gr.Number(
-                    value=1000,
+                    value=8192,
                     label="Max Tokens",
                     precision=0,
                 )
@@ -118,7 +118,7 @@ class ChatInterface:
         provider: str = "openai",
         model_name: str = "gpt-4o",
         temperature: float = 0.7,
-        max_tokens: int = 1000,
+        max_tokens: int = 8192,
         on_update: Optional[Callable[[ConversationState], None]] = None,
         always_permit: bool = False,
     ) -> AsyncGenerator[List[Dict[str, Any]], None]:
@@ -400,7 +400,7 @@ async def send_message(
     provider: str = "openai",
     model_name: str = "gpt-4o",
     temperature: float = 0.7,
-    max_tokens: int = 1000,
+    max_tokens: int = 8192,
     always_permit: bool = False,
 ) -> AsyncGenerator[List[Dict[str, Any]], None]:
     """Send a message to the backend and stream the response.

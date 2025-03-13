@@ -185,9 +185,9 @@ def _get_model_cls(provider: str) -> type["Model"]:
 
         return AnthropicModel
     elif provider == "bedrock":
-        from pydantic_ai_bedrock.bedrock import BedrockModel
+        from pydantic_ai.models.bedrock import BedrockConverseModel
 
-        return BedrockModel
+        return BedrockConverseModel
     elif provider == "cohere":
         from pydantic_ai.models.cohere import CohereModel
 
