@@ -13,7 +13,11 @@ def get_config() -> Config:
 
 DEFAULT_CONVERSATION_SYSTEM_PROMPT = (_HERE / "prompts" / "system-conversation.md").read_text()
 
-DEFAULT_WORKFLOW_SYSTEM_PROMPT = (_HERE / "prompts" / "system-workflow.md").read_text()
+DEFAULT_WORKFLOW_SYSTEM_PROMPT = {
+    "planner": (_HERE / "prompts" / "workflow" / "system-planner.md").read_text(),
+    "actor": (_HERE / "prompts" / "workflow" / "system-actor.md").read_text(),
+    "validator": (_HERE / "prompts" / "workflow" / "system-validator.md").read_text(),
+}
 
 
 class Config(BaseSettings):
@@ -37,8 +41,12 @@ class Config(BaseSettings):
     default_model_name: str | None = None
     default_model_kwargs: str | None = None
 
-    default_conversation_system_prompt: str = DEFAULT_CONVERSATION_SYSTEM_PROMPT
-    default_workflow_system_prompt: str = DEFAULT_WORKFLOW_SYSTEM_PROMPT
+    conversation_system_prompt: str = DEFAULT_CONVERSATION_SYSTEM_PROMPT
+
+    planner_system_prompt: str = DEFAULT_WORKFLOW_SYSTEM_PROMPT["planner"]
+    actor_system_prompt: str = DEFAULT_WORKFLOW_SYSTEM_PROMPT["actor"]
+    validator_system_prompt: str = DEFAULT_WORKFLOW_SYSTEM_PROMPT["validator"]
+
     mcp_config_path: str = (Path.cwd() / "./mcp.json").expanduser().resolve().absolute().as_posix()
 
     model_config = SettingsConfigDict(env_prefix="floword_", case_sensitive=False, frozen=True, env_file=".env")
